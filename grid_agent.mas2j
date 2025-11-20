@@ -1,0 +1,7 @@
+MAS gridAgent {
+
+  environment: env.GridEnvironment
+  agents: agent1;
+
+  aslSourcePath: "src/agt";
+}
