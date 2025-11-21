@@ -3,11 +3,11 @@
 
 /* Change this line to !task_open if you want to test the door logic */
 /* Both tasks work as expected right now, without any logic for cost efficiency */
-+!start <- !task_paint. 
++!start <- !task_open_door.
 
+// TODO: Separate the painting tasks into different plans
 /* ================================================================== */
-/* TASK 1: PAINTING (Strict Sequence)                                 */
-/* Order: Drop Junk -> Get Brush -> Get Color -> Paint Table -> Chair */
+/* TASK 1: PAINTING                                                   */
 /* ================================================================== */
 +!task_paint <-
     .print("=== STARTING TASK: PAINTING ===");
@@ -33,10 +33,9 @@
     .print("=== TASK PAINTING COMPLETE ===").
 
 /* ================================================================== */
-/* TASK 2: OPEN DOOR (Strict Sequence)                                */
-/* Order: Drop Junk -> Get Key -> Get Code -> Open Door               */
+/* TASK 2: OPEN DOOR                                                  */
 /* ================================================================== */
-+!task_open <-
++!task_open_door <-
     .print("=== STARTING TASK: OPEN DOOR ===");
 
     // Step 1: Clean Inventory
@@ -110,6 +109,11 @@
     actions.PathTo(Sx, Sy, Tx, Ty, PathList);
     !execute_path(PathList).
 
+-!go_to(X, Y) <-
+    .print("ERROR: Pathfinding failed to ", X, ",", Y);
+    .wait(1000);
+    !go_to(X, Y).
+
 +!execute_path([]).
 +!execute_path([Move|Rest]) <-
     move(Move);
@@ -120,8 +124,3 @@
     .print("ERROR: Failed to pick up ", Item, ". Retrying...");
     .wait(1000);
     !ensure_have(Item).
-
--!go_to(X, Y) <-
-    .print("ERROR: Pathfinding failed to ", X, ",", Y);
-    .wait(1000);
-    !go_to(X, Y).

@@ -49,7 +49,10 @@ public class PathTo extends DefaultInternalAction {
     }
 
     private List<String> aStarPath(int sx, int sy, int tx, int ty) {
-        if (GridEnvironment.isBlocked(tx, ty)) return null;
+        if (GridEnvironment.isBlocked(tx, ty)) {
+            System.out.println("aStarPath: target (" + tx + "," + ty + ") is blocked.");
+            return null;
+        }
 
         int W = GridEnvironment.getWidth();
         int H = GridEnvironment.getHeight();
