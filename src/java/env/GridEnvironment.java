@@ -6,33 +6,31 @@ import jason.environment.grid.GridWorldModel;
 import jason.environment.grid.GridWorldView;
 import jason.environment.grid.Location;
 // import jason.stdlib.queue.add;
+
 import java.util.*;
 import java.awt.Color;
 import java.awt.Graphics;
-// import java.awt.Font;
-// import java.util.logging.Logger;
 
 public class GridEnvironment extends Environment {
 
     private static int W =5, H =5, nbAgs = 1;
 
-    public static final int OBSTACLE = 16;
-    public static final int TOOL = 8;
-    /* FIXME: Figure out a mask that works for the targets */
-    // public static final int TARGET_OBJECT = 1;
-    
+    public static final int OBSTACLE = 8;
+    public static final int TOOL = 16;
+    public static final int DOOR = 32;
+    public static final int TABLE = 64;
+    public static final int CHAIR = 128;
     
     private MyModel model;
-    private Location agentPos = new Location(0, 4);
-    private Set<Location> obstacles;
-    private static Set<Location> staticObstacles;
+    private Location agentPos;
+    private static Set<Location> obstacles;
     private Set<String> inventory;
     private Set<String> goalsDone;
-    private Map<String, Location> objects;
+    public double cumulativeReward = 0.0; /* TODO: Implement reward tracking */
 
-    // private int currentEpisode = 0;
-    // private final int MAX_EPISODES = 100;
-    // private Random random = new Random();
+    private int currentEpisode = 1;
+    private final int MAX_EPISODES = 10;
+    // private Random random = new Random(); /* TODO: Implement randomization for target placement */
 
     public static int getWidth() { return W; }
     public static int getHeight() { return H; }
@@ -40,7 +38,6 @@ public class GridEnvironment extends Environment {
     @Override
     public void init(String[] args) {
         model = new MyModel();
-
         new MyView(model);
         
         obstacles = new HashSet<>();
@@ -48,122 +45,176 @@ public class GridEnvironment extends Environment {
         obstacles.add(new Location(1, 4));
         obstacles.add(new Location(3, 0));
         obstacles.add(new Location(3, 1));
-        staticObstacles = obstacles;
-        
-        /* Tracking objects' locations for pathfinding */
-        objects = new HashMap<>();
-        objects.put("brush", new Location(0, 0));
-        objects.put("key", new Location(0, 1));
-        objects.put("code", new Location(2, 0));
-        objects.put("door", new Location(2, 4));
-        objects.put("chair", new Location(3, 3));
-        objects.put("color", new Location(4, 0));
-        objects.put("table", new Location(4, 4));
-        
+
+        for (Location loc : obstacles) {
+            model.add(OBSTACLE, loc.x, loc.y);
+        }
+
         inventory = new HashSet<>();
         goalsDone = new HashSet<>();
+
+        startNewEpisode();
+        
         // cumulativeReward = 0.0;
         
-        updatePercepts();
-        informAgsEnvironmentChanged();
-        System.out.println("Environment initialized with percepts");
+        System.out.println("Environment initialized.");
     }
 
-    // private void startNewEpisode() {
-    //     // 1. Reset Agent Position (e.g., back to 0,0 or random)
-    //     model.setAgPos(0, new Location(0, 0)); 
+    private void startNewEpisode() {
+        System.out.println("--- STARTING EPISODE " + (currentEpisode) + " ---");
 
-    //     // 2. Generate a Valid Random Target
-    //     do {
-    //         int x = random.nextInt(model.getWidth());
-    //         int y = random.nextInt(model.getHeight());
-    //         targetLoc = new Location(x, y);
-            
-    //         // Ensure we don't put the target on a wall or on the agent
-    //     } while (!model.isFree(targetLoc) || (targetLoc.x == 0 && targetLoc.y == 0));
+        inventory.clear();
+        goalsDone.clear();
 
-    //     // 3. Update Percepts immediately so agent knows the new goal
-    //     updatePercepts();
-    // }
+        agentPos = new Location(0, 4);
+
+        try { model.setAgPos(0, agentPos); } catch (Exception e) {}
+        model.resetObjects();
+
+        updatePercepts("agent1");
+        informAgsEnvironmentChanged();
+    }
+
+//     private Location getFreeRandomLocation() {
+//     Location loc;
+//     boolean isFree;
+    
+//     do {
+//         isFree = true;
+//         // Generate random X, Y
+//         int x = random.nextInt(model.getWidth());
+//         int y = random.nextInt(model.getHeight());
+//         loc = new Location(x, y);
+
+//         // Check 1: Is it a Wall or Agent? (Standard Grid Check)
+//         if (!model.isFree(loc)) {
+//             isFree = false;
+//         }
+
+//         // Check 2: Is it (0,4)? (Don't spawn on top of the agent start)
+//         if (x == 0 && y == 4) {
+//             isFree = false;
+//         }
+
+//         // Check 3: Is another object already there?
+//         if (model.objects.containsValue(loc)) {
+//             isFree = false;
+//         }
+
+//     } while (!isFree); /* Keep trying until we find a free spot */
+
+//     return loc;
+// }
 
     static class MyView extends GridWorldView {
 
         public MyView(MyModel model) {
             super(model, "Grid View", 600);
             setVisible(true);
+            repaint();
         }
 
         @Override
         public void draw(Graphics g, int x, int y, int object) {
-            if (object == MyModel.OBSTACLE) {
+            if ((object & OBSTACLE) != 0) {
                 drawObstacle(g, x, y);
                 return;
             }
-            if (object == TOOL) {
+            if ((object & TOOL) != 0) {
                 drawTools(g, x, y);
                 return;
             }
-            // if (object == TARGET_OBJECT) {
-            //     drawTargetObjects(g, x, y);
-            //     return;
-            // }
+            if ((object & DOOR) != 0) {
+                drawDoor(g, x, y);
+                return;
+            }
+            if ((object & TABLE) != 0) {
+                drawTable(g, x, y);
+                return;
+            }
+            if ((object & CHAIR) != 0) {
+                drawChair(g, x, y);
+                return;
+            }
             
             super.draw(g, x, y, object);
         }
 
         @Override
         public void drawObstacle(Graphics g, int x, int y) {
+            super.drawObstacle(g, x, y);
             g.setColor(Color.BLACK);
             g.fillRect(x * cellSizeW + 1, y * cellSizeH + 1, cellSizeW - 2, cellSizeH - 2);
         }
 
         public void drawTools(Graphics g, int x, int y) {
-            g.setColor(Color.YELLOW);
+            g.setColor(Color.BLACK);
             g.fillRect(x * cellSizeW + 1, y * cellSizeH + 1, cellSizeW - 2, cellSizeH - 2);
-            drawString(g, x, y, g.getFont(), "Tool");
         }
 
-        // public void drawTargetObjects(Graphics g, int x, int y) {
-        //     g.setColor(Color.CYAN);
-        //     g.fillRect(x * cellSizeW + 1, y * cellSizeH + 1, cellSizeW - 2, cellSizeH - 2);
-        //     drawString(g, x, y, g.getFont(), "Obj");
-        // }
+        public void drawDoor(Graphics g, int x, int y) {
+            g.setColor(Color.RED);
+            g.drawRect(x * cellSizeW + 2, y * cellSizeH + 2, cellSizeW - 4, cellSizeH - 4);
+            g.drawString("D", x * cellSizeW + (cellSizeW/2) - 4, y * cellSizeH + (cellSizeH/2) + 4);
+        }
+
+        public void drawTable(Graphics g, int x, int y) {
+            g.setColor(Color.RED);
+            g.drawRect(x * cellSizeW + 2, y * cellSizeH + 2, cellSizeW - 4, cellSizeH - 4);
+            g.drawString("T", x * cellSizeW + (cellSizeW/2) - 4, y * cellSizeH + (cellSizeH/2) + 4);
+        }
+
+        public void drawChair(Graphics g, int x, int y) {
+            g.setColor(Color.RED);
+            g.drawRect(x * cellSizeW + 2, y * cellSizeH + 2, cellSizeW - 4, cellSizeH - 4);
+            g.drawString("Ch", x * cellSizeW + (cellSizeW/2) - 4, y * cellSizeH + (cellSizeH/2) + 4);
+        }
     }
     
     class MyModel extends GridWorldModel {
+
+        public Map<String, Location> objects = new HashMap<>();
+        // public static final String[] DYNAMIC_ITEMS = {"door", "chair", "table"};
         
         public MyModel() {
             super(W, H, nbAgs);
+        }
 
-            try {
-                setAgPos(0, agentPos);
-            } catch (Exception e) {
-                e.printStackTrace();
+        public void resetObjects() {
+            for(int i=0; i<W; i++){
+                for(int j=0; j<H; j++){
+                    remove(TOOL, i, j); 
+                }
             }
 
-            add(OBSTACLE, 1, 3);
-            add(OBSTACLE, 1, 4);
-            add(OBSTACLE, 3, 0);
-            add(OBSTACLE, 3, 1);
+            /* Reset logic map */
+            objects.clear();
+            objects.put("brush", new Location(0, 0));
+            objects.put("key", new Location(0, 1));
+            objects.put("code", new Location(2, 0));
+            objects.put("color", new Location(4, 0));
+            objects.put("door", new Location(2, 4));
+            objects.put("chair", new Location(3, 3));
+            objects.put("table", new Location(4, 4));
 
-            add(TOOL, 0, 0); /* Brush */
-            add(TOOL, 0, 1); /* Key */
-            add(TOOL, 2, 0); /* Code */
-            add(TOOL, 4, 0); /* Color */
-            // add(TARGET_OBJECT, 2, 4); /* Door */
-            // add(TARGET_OBJECT, 3, 3); /* Chair */
-            // add(TARGET_OBJECT, 4, 4); /* Table */
+            add(TOOL, 0, 0);
+            add(TOOL, 0, 1);
+            add(TOOL, 2, 0);
+            add(TOOL, 4, 0);
+
+            add(DOOR, 2, 4);
+            add(CHAIR, 3, 3);
+            add(TABLE, 4, 4);
         }
+
         public boolean isFree(Location l) {
-            return super.isFree(l.x, l.y);
+            return inGrid(l) && !hasObject(OBSTACLE, l);
         }
     }
 
-    
-
     public static boolean isBlocked(int x, int y) {
     if (x < 0 || y < 0 || x >= W || y >= H) return true;
-    return staticObstacles != null && staticObstacles.contains(new Location(x, y));
+    return obstacles != null && obstacles.contains(new Location(x, y));
     }
     
 //     private double calculateStepReward() {
@@ -195,11 +246,9 @@ public class GridEnvironment extends Environment {
 
     @Override
     public boolean executeAction(String agName, Structure action) {
-        try {
-            Thread.sleep(300); /* Pause for visualization */
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
+
+        /* Pauses for visualization */
+        // try { Thread.sleep(300); } catch (Exception e) {}
 
         String actName = action.getFunctor();
         boolean result = false;
@@ -207,9 +256,7 @@ public class GridEnvironment extends Environment {
         
         switch(actName) {
             case "move":
-                System.out.println("Processing move: " + action.getTerm(0));
                 result = move(termToId(action.getTerm(0)));
-                System.out.println("Move result: " + result);
                 // reward = calculateStepReward();
                 break;
             case "pickup":
@@ -229,10 +276,21 @@ public class GridEnvironment extends Environment {
                 // reward = result ? 1.0 : 0;
                 break;
         }
-        
-        // cumulativeReward += reward;
-        updatePercepts();
-        informAgsEnvironmentChanged();
+
+        if (isGoalAchieved()) {
+            System.out.println("SUCCESS! Episode " + (currentEpisode) + " cleared.");
+
+            currentEpisode++;
+            if (currentEpisode <= MAX_EPISODES) {   
+                try { Thread.sleep(500); } catch (Exception e) {}             
+                startNewEpisode();
+            } else {
+                System.out.println(">>> ALL RUNS FINISHED <<<");
+            }
+        } else {
+            updatePercepts("agent1");
+            informAgsEnvironmentChanged();
+        }
         return result;
     }
 
@@ -241,23 +299,7 @@ public class GridEnvironment extends Environment {
     // }
 
     public boolean isGoalAchieved() {
-    return goalsDone.contains("painted_table") && goalsDone.contains("painted_chair") && 
-           goalsDone.contains("open_door");
-    }
-
-    /* Remove surrounding quotes from a Term string (if needed) */
-    private String termToId(Term t) {
-        String s = t.toString();
-        if (s.startsWith("'") && s.endsWith("'")) s = s.substring(1, s.length() - 1);
-        return s;
-    }
-
-    private boolean hasObstacle(Location l) {
-    return obstacles.contains(l);
-    }
-
-    private boolean cellIsFree(Location l) {
-    return model.isFree(l.x, l.y) && !hasObstacle(l);
+        return goalsDone.contains("painted_chair") && goalsDone.contains("painted_table");
     }
     
     private boolean move(String direction) {
@@ -276,11 +318,8 @@ public class GridEnvironment extends Environment {
                 newPos.x--;
                 break;
         }
-
-        System.out.println("Current pos: " + agentPos + ", New pos: " + newPos);
-        System.out.println("In grid: " + model.inGrid(newPos) + ", Cell free: " + cellIsFree(newPos));
         
-        if (model.inGrid(newPos) && cellIsFree(newPos)) {
+        if (model.inGrid(newPos) && !model.hasObject(OBSTACLE, newPos)) {
             agentPos = newPos;
             try {
                 model.setAgPos(0, agentPos);
@@ -298,32 +337,36 @@ public class GridEnvironment extends Environment {
             return false;
         }
         
-        Location objLoc = objects.get(obj);
+        Location objLoc = model.objects.get(obj);
 
         if (objLoc == null) {
-            System.out.println("PICKUP FAILED: Object " + obj + " not found. (Location is null)");
-            return false;
+             System.out.println("PICKUP ERROR: Object " + obj + " does not exist in model.");
+             return false;
         }
 
-        if(agentPos.equals(objLoc)) {
+        if (agentPos.equals(objLoc)) {
             inventory.add(obj);
-            System.out.println("PICKUP SUCCESS: Picked up " + obj + ". Inventory: " + inventory);
+            model.remove(TOOL, objLoc.x, objLoc.y);
             return true;
-         } else {
-            System.out.println("PICKUP FAILED: Location mismatch. Agent at " + agentPos + ", Object at " + objLoc);
-            return false;
         }
+
+        System.out.println("PICKUP FAILED: Agent not at object location. Agent: " + agentPos + ", Object: " + objLoc);
+        return false;
     }
     
     private boolean drop(String obj) {
-        return inventory.remove(obj);
+        if (inventory.contains(obj)) {
+            inventory.remove(obj);
+            model.add(TOOL, agentPos.x, agentPos.y);
+            model.objects.put(obj, (Location)agentPos.clone());
+            return true;
+        }
+        return false;
     }
     
     private boolean openDoor() {
-        Location doorLoc = objects.get("door");
-        if(agentPos.equals(doorLoc) && 
-           inventory.contains("key") && 
-           inventory.contains("code")) {
+        Location doorLoc = model.objects.get("door");
+        if (agentPos.equals(doorLoc) && inventory.contains("key") && inventory.contains("code")) {
             goalsDone.add("open_door");
             return true;
         }
@@ -331,48 +374,58 @@ public class GridEnvironment extends Environment {
     }
     
     private boolean paint(String obj) {
-        Location objLoc = objects.get(obj);
-        if(agentPos.equals(objLoc) && 
-           inventory.contains("brush") && 
-           inventory.contains("color")) {
+        Location objLoc = model.objects.get(obj);
+        if (agentPos.equals(objLoc) && inventory.contains("brush") && inventory.contains("color")) {
             goalsDone.add("painted_" + obj);
             return true;
         }
         return false;
     }
-    
-    private void updatePercepts() {
-        clearPercepts();
-        String agentName = "agent1";
 
+    /* Helper function: Remove surrounding quotes from a Term string (if needed) */
+    private String termToId(Term t) {
+        String s = t.toString();
+        if (s.startsWith("'") && s.endsWith("'")) s = s.substring(1, s.length() - 1);
+        return s;
+    }
+    
+    private void updatePercepts(String agName) {
+        clearPercepts(agName);
+
+        Location l = model.getAgPos(0);
         int count = 0;
+
+        /* Add episode percept */
+        addPercept(agName, Literal.parseLiteral("episode(" + currentEpisode + ")"));
         
         /* Add position percept */
-        addPercept(agentName, Literal.parseLiteral("pos(" + agentPos.x + "," + agentPos.y + ")"
-        ));
+        addPercept(agName, Literal.parseLiteral("pos(" + l.x + "," + l.y + ")"));
         count++;
         
         /* Add inventory percepts */
         for(String item : inventory) {
-            addPercept(agentName, Literal.parseLiteral("holding(" + item + ")"));
+            addPercept(agName, Literal.parseLiteral("holding(" + item + ")"));
             count++;
         }
         
         /* Add nearby objects */
-        for(Map.Entry<String, Location> entry : objects.entrySet()) {
+        for (Map.Entry<String, Location> entry : model.objects.entrySet()) {
+            String objName = entry.getKey();
             Location loc = entry.getValue();
-            addPercept(agentName, Literal.parseLiteral("at(" + entry.getKey() + "," + loc.x + "," + loc.y + ")"));
-            count++;
-        }
+            if (!inventory.contains(objName)) {
+                addPercept(agName, Literal.parseLiteral("at(" + objName + "," + loc.x + "," + loc.y + ")"));
+            }
+    }
 
         /* Add obstacle percepts */
         for(Location obs : obstacles) {
-            addPercept(agentName, Literal.parseLiteral("obstacle(" + obs.x + "," + obs.y + ")"));
+            addPercept(agName, Literal.parseLiteral("obstacle(" + obs.x + "," + obs.y + ")"));
             count++;
         }
         
         /* Add goal percepts */
-        for(String goal : goalsDone) {addPercept(agentName, Literal.parseLiteral(goal));
+        for(String goal : goalsDone) {
+            addPercept(agName, Literal.parseLiteral(goal));
             count++;
         }
         
