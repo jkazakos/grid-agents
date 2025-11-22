@@ -5,8 +5,6 @@ import jason.environment.Environment;
 import jason.environment.grid.GridWorldModel;
 import jason.environment.grid.GridWorldView;
 import jason.environment.grid.Location;
-// import jason.stdlib.queue.add;
-
 import java.util.*;
 import java.awt.Color;
 import java.awt.Graphics;
@@ -26,11 +24,11 @@ public class GridEnvironment extends Environment {
     private static Set<Location> obstacles;
     private Set<String> inventory;
     private Set<String> goalsDone;
-    public double cumulativeReward = 0.0; /* TODO: Implement reward tracking */
+    // public double cumulativeReward = 0.0; /* TODO: Implement reward tracking - Maybe this is not the file for that -> Look at PathCost.java */
 
     private int currentEpisode = 1;
     private final int MAX_EPISODES = 10;
-    // private Random random = new Random(); /* TODO: Implement randomization for target placement */
+    private Random random = new Random();
 
     public static int getWidth() { return W; }
     public static int getHeight() { return H; }
@@ -75,36 +73,30 @@ public class GridEnvironment extends Environment {
         informAgsEnvironmentChanged();
     }
 
-//     private Location getFreeRandomLocation() {
-//     Location loc;
-//     boolean isFree;
-    
-//     do {
-//         isFree = true;
-//         // Generate random X, Y
-//         int x = random.nextInt(model.getWidth());
-//         int y = random.nextInt(model.getHeight());
-//         loc = new Location(x, y);
+    private Location getFreeLocation(Set<Location> forbidden) {
+        Location loc;
+        boolean isBlocked;
+        
+        do {
+            isBlocked = false;
+            int x = random.nextInt(W);
+            int y = random.nextInt(H);
+            loc = new Location(x, y);
 
-//         // Check 1: Is it a Wall or Agent? (Standard Grid Check)
-//         if (!model.isFree(loc)) {
-//             isFree = false;
-//         }
+            /* Constraint 1: Check against forbidden locations */
+            if (forbidden.contains(loc)) {
+                isBlocked = true;
+            }
+            
+            /* Constraint 2: Double check the model for static obstacles (not sure if needed) */
+            if (!model.isFree(loc)) {
+                isBlocked = true;
+            }
 
-//         // Check 2: Is it (0,4)? (Don't spawn on top of the agent start)
-//         if (x == 0 && y == 4) {
-//             isFree = false;
-//         }
+        } while (isBlocked);
 
-//         // Check 3: Is another object already there?
-//         if (model.objects.containsValue(loc)) {
-//             isFree = false;
-//         }
-
-//     } while (!isFree); /* Keep trying until we find a free spot */
-
-//     return loc;
-// }
+        return loc;
+}
 
     static class MyView extends GridWorldView {
 
@@ -148,7 +140,7 @@ public class GridEnvironment extends Environment {
         }
 
         public void drawTools(Graphics g, int x, int y) {
-            g.setColor(Color.BLACK);
+            g.setColor(Color.YELLOW);
             g.fillRect(x * cellSizeW + 1, y * cellSizeH + 1, cellSizeW - 2, cellSizeH - 2);
         }
 
@@ -174,7 +166,6 @@ public class GridEnvironment extends Environment {
     class MyModel extends GridWorldModel {
 
         public Map<String, Location> objects = new HashMap<>();
-        // public static final String[] DYNAMIC_ITEMS = {"door", "chair", "table"};
         
         public MyModel() {
             super(W, H, nbAgs);
@@ -183,9 +174,26 @@ public class GridEnvironment extends Environment {
         public void resetObjects() {
             for(int i=0; i<W; i++){
                 for(int j=0; j<H; j++){
-                    remove(TOOL, i, j); 
+                    remove(TOOL, i, j);
+                    remove(DOOR, i, j);
+                    remove(CHAIR, i, j);
+                    remove(TABLE, i, j);
                 }
             }
+
+            Set<Location> forbidden = new HashSet<>();
+            forbidden.addAll(obstacles);
+            forbidden.add(new Location(0, 4));
+
+            Location brushLoc = new Location(0, 0);
+            Location keyLoc   = new Location(0, 1);
+            Location codeLoc  = new Location(2, 0);
+            Location colorLoc = new Location(4, 0);
+
+            forbidden.add(brushLoc);
+            forbidden.add(keyLoc);
+            forbidden.add(codeLoc);
+            forbidden.add(colorLoc);
 
             /* Reset logic map */
             objects.clear();
@@ -202,9 +210,23 @@ public class GridEnvironment extends Environment {
             add(TOOL, 2, 0);
             add(TOOL, 4, 0);
 
-            add(DOOR, 2, 4);
-            add(CHAIR, 3, 3);
-            add(TABLE, 4, 4);
+            /* Place Door */
+            Location doorLoc = getFreeLocation(forbidden);
+            objects.put("door", doorLoc);
+            add(DOOR, doorLoc.x, doorLoc.y);
+            forbidden.add(doorLoc);
+
+            /* Place Chair */
+            Location chairLoc = getFreeLocation(forbidden);
+            objects.put("chair", chairLoc);
+            add(CHAIR, chairLoc.x, chairLoc.y);
+            forbidden.add(chairLoc);
+
+            /* Place Table */
+            Location tableLoc = getFreeLocation(forbidden);
+            objects.put("table", tableLoc);
+            add(TABLE, tableLoc.x, tableLoc.y);
+            forbidden.add(tableLoc);
         }
 
         public boolean isFree(Location l) {
@@ -217,38 +239,32 @@ public class GridEnvironment extends Environment {
     return obstacles != null && obstacles.contains(new Location(x, y));
     }
     
-//     private double calculateStepReward() {
-//     int carrying = inventory.size();
-//     if (carrying == 0) return -0.01;
-    
-//     int paintTools = 0; // Brush, Color
-//     int doorTools = 0;  // Key, Code
-    
-//     if (inventory.contains("brush")) paintTools++;
-//     if (inventory.contains("color")) paintTools++;
-//     if (inventory.contains("key")) doorTools++;
-//     if (inventory.contains("code")) doorTools++;
-
-//     int incompatibleCount = 0;
-    
-//     if (paintTools == 0 && doorTools == 0) {
-//         incompatibleCount = 0;
-//     } else if (paintTools >= doorTools) {
-//         incompatibleCount = doorTools;
-//     } else {
-//         incompatibleCount = paintTools;
-//     }
-
-//     double penalty = -0.02 * carrying - 0.03 * incompatibleCount;
-    
-//     return penalty;
-// }
+    // private double calculateStepReward() {
+    //     int carrying = inventory.size();
+    //     if (carrying == 0) return -0.01;
+    //     int paintTools = 0; // Brush, Color
+    //     int doorTools = 0;  // Key, Code
+    //     if (inventory.contains("brush")) paintTools++;
+    //     if (inventory.contains("color")) paintTools++;
+    //     if (inventory.contains("key")) doorTools++;
+    //     if (inventory.contains("code")) doorTools++;
+    //     int incompatibleCount = 0;
+    //     if (paintTools == 0 && doorTools == 0) {
+    //         incompatibleCount = 0;
+    //     } else if (paintTools >= doorTools) {
+    //         incompatibleCount = doorTools;
+    //     } else {
+    //         incompatibleCount = paintTools;
+    //     }
+    //     double penalty = -0.02 * carrying - 0.03 * incompatibleCount;
+    //     return penalty;
+    // }
 
     @Override
     public boolean executeAction(String agName, Structure action) {
 
         /* Pauses for visualization */
-        // try { Thread.sleep(300); } catch (Exception e) {}
+        try { Thread.sleep(300); } catch (Exception e) {}
 
         String actName = action.getFunctor();
         boolean result = false;
