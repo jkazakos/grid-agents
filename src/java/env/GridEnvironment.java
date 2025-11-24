@@ -9,6 +9,7 @@ import java.util.*;
 import java.awt.Color;
 import java.awt.Graphics;
 
+//* Class that defines a grid world environment for an agent.
 public class GridEnvironment extends Environment {
 
     private static int W =5, H =5, nbAgs = 1;
@@ -24,7 +25,8 @@ public class GridEnvironment extends Environment {
     private static Set<Location> obstacles;
     private Set<String> inventory;
     private Set<String> goalsDone;
-    // public double cumulativeReward = 0.0; /* TODO: Implement reward tracking - Maybe this is not the file for that -> Look at PathCost.java */
+    // TODO: Implement reward tracking
+    // public double cumulativeReward = 0.0; 
 
     private int currentEpisode = 1;
     private final int MAX_EPISODES = 10;
@@ -83,12 +85,12 @@ public class GridEnvironment extends Environment {
             int y = random.nextInt(H);
             loc = new Location(x, y);
 
-            /* Constraint 1: Check against forbidden locations */
+            //* Constraint 1: Check against forbidden locations
             if (forbidden.contains(loc)) {
                 isBlocked = true;
             }
             
-            /* Constraint 2: Double check the model for static obstacles (not sure if needed) */
+            //* Constraint 2: Double check the model for static obstacles (not sure if needed)
             if (!model.isFree(loc)) {
                 isBlocked = true;
             }
@@ -101,7 +103,7 @@ public class GridEnvironment extends Environment {
     static class MyView extends GridWorldView {
 
         public MyView(MyModel model) {
-            super(model, "Grid View", 600);
+            super(model, "Grid Environment", 800);
             setVisible(true);
             repaint();
         }
@@ -195,7 +197,7 @@ public class GridEnvironment extends Environment {
             forbidden.add(codeLoc);
             forbidden.add(colorLoc);
 
-            /* Reset logic map */
+            //* Reset logic map
             objects.clear();
             objects.put("brush", new Location(0, 0));
             objects.put("key", new Location(0, 1));
@@ -210,19 +212,19 @@ public class GridEnvironment extends Environment {
             add(TOOL, 2, 0);
             add(TOOL, 4, 0);
 
-            /* Place Door */
+            //* Place Door
             Location doorLoc = getFreeLocation(forbidden);
             objects.put("door", doorLoc);
             add(DOOR, doorLoc.x, doorLoc.y);
             forbidden.add(doorLoc);
 
-            /* Place Chair */
+            //* Place Chair
             Location chairLoc = getFreeLocation(forbidden);
             objects.put("chair", chairLoc);
             add(CHAIR, chairLoc.x, chairLoc.y);
             forbidden.add(chairLoc);
 
-            /* Place Table */
+            //* Place Table
             Location tableLoc = getFreeLocation(forbidden);
             objects.put("table", tableLoc);
             add(TABLE, tableLoc.x, tableLoc.y);
@@ -263,7 +265,7 @@ public class GridEnvironment extends Environment {
     @Override
     public boolean executeAction(String agName, Structure action) {
 
-        /* Pauses for visualization */
+        //* Pauses for visualization
         try { Thread.sleep(300); } catch (Exception e) {}
 
         String actName = action.getFunctor();
@@ -322,10 +324,10 @@ public class GridEnvironment extends Environment {
         Location newPos = (Location) agentPos.clone();
         switch(direction) {
             case "up":
-                newPos.y--; /* Y axis is inverted in GridWorld */
+                newPos.y--; //* Y axis is inverted in GridWorld
                 break;
             case "down":
-                newPos.y++; /* Y axis is inverted in GridWorld */
+                newPos.y++; //* Y axis is inverted in GridWorld
                 break;
             case "right":
                 newPos.x++;
@@ -398,7 +400,7 @@ public class GridEnvironment extends Environment {
         return false;
     }
 
-    /* Helper function: Remove surrounding quotes from a Term string (if needed) */
+    //* Helper function: Remove surrounding quotes from a Term string (if needed)
     private String termToId(Term t) {
         String s = t.toString();
         if (s.startsWith("'") && s.endsWith("'")) s = s.substring(1, s.length() - 1);
@@ -411,20 +413,20 @@ public class GridEnvironment extends Environment {
         Location l = model.getAgPos(0);
         int count = 0;
 
-        /* Add episode percept */
+        //* Add episode percept
         addPercept(agName, Literal.parseLiteral("episode(" + currentEpisode + ")"));
         
-        /* Add position percept */
+        //* Add position percept
         addPercept(agName, Literal.parseLiteral("pos(" + l.x + "," + l.y + ")"));
         count++;
         
-        /* Add inventory percepts */
+        //* Add inventory percepts
         for(String item : inventory) {
             addPercept(agName, Literal.parseLiteral("holding(" + item + ")"));
             count++;
         }
         
-        /* Add nearby objects */
+        //* Add nearby objects
         for (Map.Entry<String, Location> entry : model.objects.entrySet()) {
             String objName = entry.getKey();
             Location loc = entry.getValue();
@@ -433,15 +435,15 @@ public class GridEnvironment extends Environment {
             }
     }
 
-        /* Add obstacle percepts */
+        //* Add obstacle percepts
         for(Location obs : obstacles) {
             addPercept(agName, Literal.parseLiteral("obstacle(" + obs.x + "," + obs.y + ")"));
             count++;
         }
         
-        /* Add goal percepts */
+        //* Add goal percepts
         for(String goal : goalsDone) {
-            addPercept(agName, Literal.parseLiteral(goal));
+            addPercept(agName, Literal.parseLiteral("goalsDone(" +goal + ")"));
             count++;
         }
         

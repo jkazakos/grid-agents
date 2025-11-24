@@ -5,9 +5,12 @@ import jason.asSemantics.TransitionSystem;
 import jason.asSemantics.Unifier;
 import jason.asSyntax.*;
 import env.GridEnvironment;
-
 import java.util.*;
 
+/* 
+ * Internal action that calculates the path (as a list of steps) between two points in the grid.
+ * If no path exists, returns false.
+ */
 public class PathTo extends DefaultInternalAction {
 
     static class Node {
@@ -86,7 +89,7 @@ public class PathTo extends DefaultInternalAction {
 
         if (end == null) return null;
 
-        // reconstruct steps (reverse)
+        // * reconstruct steps (reverse)
         List<String> rev = new ArrayList<>();
         Node cur = end;
         while (cur.parent != null) {
@@ -105,7 +108,7 @@ public class PathTo extends DefaultInternalAction {
         if (y2 == y1 + 1 && x2 == x1) return "down";
         if (y2 == y1 - 1 && x2 == x1) return "up";
         System.out.println("dir: invalid move from (" + x1 + "," + y1 + ") to (" + x2 + "," + y2 + ")");
-        return "right"; // fallback; should not happen
+        return "right"; //! fallback; should not happen
     }
 
     private static int manhattan(int x1, int y1, int x2, int y2) {
