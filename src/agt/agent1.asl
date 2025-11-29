@@ -2,21 +2,23 @@
 //* KNOWLEDGE BASE: Tool Relevance                                     */
 //* ================================================================== */
 
-// is_needed_for(brush, painting).
-// is_needed_for(color, painting).
-// is_needed_for(key, door).
-// is_needed_for(code, door).
+is_needed_for(brush, painting).
+is_needed_for(color, painting).
+is_needed_for(key, door).
+is_needed_for(code, door).
 
 !start.
 
-//* Loop for every episode start
+//* ================================================================== */
+//* INITIALIZATION */
+//* ================================================================== */
 +episode(Ep) : true 
    <- .print("--- NEW EPISODE ", Ep, " ---");
       .drop_all_intentions;
       .abolish(holding(_));
-      .abolish(goalsDone(_));
       .abolish(strategy(_));
       .abolish(paint_order(_));
+      .abolish(tool_order(_, _));
       !start.
 
 +!start : true
@@ -137,14 +139,14 @@
 +!finish_episode <- .print(">>> SUCCESS: All missions accomplished! <<<").
 
 //* Phase Managers
-+!run_phase(painting) : not goalsDone(painted_chair) | not goalsDone(painted_table)
++!run_phase(painting) : not painted_chair | not painted_table
    <- .print(">>> PHASE: PAINTING");
       !manage_inventory(painting);
       !get_painting_tools;
       !execute_painting_tasks.
 +!run_phase(painting). //* Already done
 
-+!run_phase(door) : not goalsDone(open_door)
++!run_phase(door) : not open_door
    <- .print(">>> PHASE: DOOR");
       !manage_inventory(door);
       !get_door_tools;
@@ -156,27 +158,28 @@
 //* ================================================================== */
 
 //* If order is Table First
-+!execute_painting_tasks : paint_order(table_first) & not goalsDone(painted_table)
++!execute_painting_tasks : paint_order(table_first) & not painted_table
    <- !achieve_paint(table); !execute_painting_tasks.
 
 //* If order is Chair First
-+!execute_painting_tasks : paint_order(chair_first) & not goalsDone(painted_chair)
++!execute_painting_tasks : paint_order(chair_first) & not painted_chair
    <- !achieve_paint(chair); !execute_painting_tasks.
 
 //* Fallback: If specific order is done, do whatever is left
-+!execute_painting_tasks : not goalsDone(painted_table)
++!execute_painting_tasks : not painted_table
    <- !achieve_paint(table); !execute_painting_tasks.
-+!execute_painting_tasks : not goalsDone(painted_chair)
++!execute_painting_tasks : not painted_chair
    <- !achieve_paint(chair); !execute_painting_tasks.
 
-+!execute_painting_tasks.
++!execute_painting_tasks. //* All done
 
+//* Paitnting Action
 +!achieve_paint(Obj) 
    <- ?at(Obj, X, Y); !go_to(X, Y); paint(Obj); .wait(200).
 
 //* Open Door
 +!open_the_door
-   <- ?at(door, Dx, Dy); !go_to(Dx, Dy); open_door; .wait(200).
+   <- ?at(door, X, Y); !go_to(X, Y); open_door; .wait(200).
 
 //* ================================================================== */
 //* TOOL ACQUISITION                                                   */

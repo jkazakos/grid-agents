@@ -26,7 +26,7 @@ public class GridEnvironment extends Environment {
     private Set<String> inventory;
     private Set<String> goalsDone;
     // TODO: Implement reward tracking
-    // public double cumulativeReward = 0.0; 
+    // public double cumulativeReward = 0.0;
 
     private int currentEpisode = 1;
     private final int MAX_EPISODES = 10;
@@ -317,7 +317,7 @@ public class GridEnvironment extends Environment {
     // }
 
     public boolean isGoalAchieved() {
-        return goalsDone.contains("painted_chair") && goalsDone.contains("painted_table");
+        return goalsDone.contains("painted_chair") && goalsDone.contains("painted_table") && goalsDone.contains("open_door");
     }
     
     private boolean move(String direction) {
@@ -443,7 +443,7 @@ public class GridEnvironment extends Environment {
         
         //* Add goal percepts
         for(String goal : goalsDone) {
-            addPercept(agName, Literal.parseLiteral("goalsDone(" +goal + ")"));
+            addPercept(agName, Literal.parseLiteral(goal));
             count++;
         }
         
