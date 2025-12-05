@@ -264,8 +264,8 @@ public class GridEnvironment extends Environment {
     }
 
     public static boolean isBlocked(int x, int y) {
-    if (x < 0 || y < 0 || x >= W || y >= H) return true;
-    return obstacles != null && obstacles.contains(new Location(x, y));
+        if (x < 0 || y < 0 || x >= W || y >= H) return true;
+        return obstacles != null && obstacles.contains(new Location(x, y));
     }
 
     @Override
@@ -424,7 +424,5 @@ public class GridEnvironment extends Environment {
         for(String goal : goalsDone) {
             addPercept(agName, Literal.parseLiteral(goal));
         }
-
-        // System.out.println("Updated percepts");
     }
 }

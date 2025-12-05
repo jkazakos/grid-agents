@@ -50,7 +50,6 @@ is_needed_for(code, door).
 
     //? SCENARIO 2: DOOR -> CHAIR -> TABLE
     //? Leg 1 is same as above (Cost_Ag_Door)
-    // TODO: Separate all of the cost (no duplicates) for clarity
     //? Leg 2: Door -> Get Paint Tools -> Go to Chair
     !calc_tool_trip(Dx, Dy, Bx, By, brush, Clx, Cly, color, Chx, Chy, Cost_Door_Chair, Order_Paint_2);
     //? Leg 3: Chair -> Table

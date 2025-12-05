@@ -9,8 +9,8 @@ import jason.asSyntax.NumberTermImpl;
 import env.GridEnvironment;
 
 /*
- * Internal action to calculate the score of an episode
- ? Updates the totalScore variable in GridEnvironment
+ * Internal action to calculate the score of an episode.
+ ? Returns the final score of the episode to the agent and updates the total score in the environment.
  */
 public class CalculateEpisodeScore extends DefaultInternalAction {
 
