@@ -11,6 +11,7 @@ import java.util.*;
 
 /*
  * Internal action that calculates the cost of the shortest path between two points in the grid.
+ ? Returns the cost as an integer number of steps.
  ! If no path exists, returns a very high cost (9999).
  */
 
@@ -54,7 +55,7 @@ public class PathCost extends DefaultInternalAction {
         while (!open.isEmpty()) {
             Node cur = open.poll();
             if (cur.x == tx && cur.y == ty) {
-                return cur.g; /* path length in steps */
+                return cur.g; //* path length in steps
             }
             if (closed[cur.x][cur.y]) continue;
             closed[cur.x][cur.y] = true;

@@ -19,14 +19,15 @@ public class GridEnvironment extends Environment {
     public static final int DOOR = 32;
     public static final int TABLE = 64;
     public static final int CHAIR = 128;
-    
+
     private MyModel model;
     private Location agentPos;
     private static Set<Location> obstacles;
     private Set<String> inventory;
     private Set<String> goalsDone;
-    // TODO: Implement reward tracking
-    // public double cumulativeReward = 0.0;
+
+    private static double totalScore = 0.0;
+    private static int episodeCount = 0;
 
     private int currentEpisode = 1;
     private final int MAX_EPISODES = 10;
@@ -35,11 +36,16 @@ public class GridEnvironment extends Environment {
     public static int getWidth() { return W; }
     public static int getHeight() { return H; }
 
+    public static void addEpisodeScore(double score) {
+        totalScore += score;
+        episodeCount++;
+    }
+
     @Override
     public void init(String[] args) {
         model = new MyModel();
         new MyView(model);
-        
+
         obstacles = new HashSet<>();
         obstacles.add(new Location(1, 3));
         obstacles.add(new Location(1, 4));
@@ -54,9 +60,7 @@ public class GridEnvironment extends Environment {
         goalsDone = new HashSet<>();
 
         startNewEpisode();
-        
-        // cumulativeReward = 0.0;
-        
+
         System.out.println("Environment initialized.");
     }
 
@@ -75,10 +79,33 @@ public class GridEnvironment extends Environment {
         informAgsEnvironmentChanged();
     }
 
+    private void triggerNextEpisode() {
+        System.out.println("SUCCESS! Agent completed Episode " + currentEpisode);
+    
+        currentEpisode++;
+
+        if (currentEpisode <= MAX_EPISODES) {
+            try { Thread.sleep(500); } catch (Exception e) {}
+            startNewEpisode();
+        } else {
+            printFinalStatistics();
+        }
+    }
+
+    private static void printFinalStatistics() {
+        double averageScore = (double) totalScore / (double) episodeCount;
+        double utility = averageScore;
+        
+        System.out.println("#############################################");
+        System.out.println("      EXPERIMENT COMPLETE (" + episodeCount + " EPISODES)     ");
+        System.out.println("      Average Expected Utility: " + utility);
+        System.out.println("#############################################");
+    }
+
     private Location getFreeLocation(Set<Location> forbidden) {
         Location loc;
         boolean isBlocked;
-        
+
         do {
             isBlocked = false;
             int x = random.nextInt(W);
@@ -89,8 +116,8 @@ public class GridEnvironment extends Environment {
             if (forbidden.contains(loc)) {
                 isBlocked = true;
             }
-            
-            //* Constraint 2: Double check the model for static obstacles (not sure if needed)
+
+            //* Constraint 2: Double check the model for static obstacles
             if (!model.isFree(loc)) {
                 isBlocked = true;
             }
@@ -98,7 +125,7 @@ public class GridEnvironment extends Environment {
         } while (isBlocked);
 
         return loc;
-}
+    }
 
     static class MyView extends GridWorldView {
 
@@ -130,7 +157,7 @@ public class GridEnvironment extends Environment {
                 drawChair(g, x, y);
                 return;
             }
-            
+
             super.draw(g, x, y, object);
         }
 
@@ -164,11 +191,11 @@ public class GridEnvironment extends Environment {
             g.drawString("Ch", x * cellSizeW + (cellSizeW/2) - 4, y * cellSizeH + (cellSizeH/2) + 4);
         }
     }
-    
+
     class MyModel extends GridWorldModel {
 
         public Map<String, Location> objects = new HashMap<>();
-        
+
         public MyModel() {
             super(W, H, nbAgs);
         }
@@ -240,86 +267,43 @@ public class GridEnvironment extends Environment {
     if (x < 0 || y < 0 || x >= W || y >= H) return true;
     return obstacles != null && obstacles.contains(new Location(x, y));
     }
-    
-    // private double calculateStepReward() {
-    //     int carrying = inventory.size();
-    //     if (carrying == 0) return -0.01;
-    //     int paintTools = 0; // Brush, Color
-    //     int doorTools = 0;  // Key, Code
-    //     if (inventory.contains("brush")) paintTools++;
-    //     if (inventory.contains("color")) paintTools++;
-    //     if (inventory.contains("key")) doorTools++;
-    //     if (inventory.contains("code")) doorTools++;
-    //     int incompatibleCount = 0;
-    //     if (paintTools == 0 && doorTools == 0) {
-    //         incompatibleCount = 0;
-    //     } else if (paintTools >= doorTools) {
-    //         incompatibleCount = doorTools;
-    //     } else {
-    //         incompatibleCount = paintTools;
-    //     }
-    //     double penalty = -0.02 * carrying - 0.03 * incompatibleCount;
-    //     return penalty;
-    // }
 
     @Override
     public boolean executeAction(String agName, Structure action) {
 
-        //* Pauses for visualization
-        try { Thread.sleep(300); } catch (Exception e) {}
+        // try { Thread.sleep(300); } catch (Exception e) {} //* Pauses for better visualization
 
         String actName = action.getFunctor();
         boolean result = false;
-        // double reward = 0;
-        
+
         switch(actName) {
             case "move":
                 result = move(termToId(action.getTerm(0)));
-                // reward = calculateStepReward();
                 break;
             case "pickup":
                 result = pickup(termToId(action.getTerm(0)));
-                // reward = result ? calculateStepReward() : 0;
                 break;
             case "drop":
                 result = drop(termToId(action.getTerm(0)));
-                // reward = calculateStepReward();
                 break;
             case "open_door":
                 result = openDoor();
-                // reward = result ? 0.8 : 0;
                 break;
             case "paint":
                 result = paint(termToId(action.getTerm(0)));
-                // reward = result ? 1.0 : 0;
+                break;
+            case "finish_episode":
+                result = true;
+                triggerNextEpisode();
                 break;
         }
 
-        if (isGoalAchieved()) {
-            System.out.println("SUCCESS! Episode " + (currentEpisode) + " cleared.");
+        updatePercepts("agent1");
+        informAgsEnvironmentChanged();
 
-            currentEpisode++;
-            if (currentEpisode <= MAX_EPISODES) {   
-                try { Thread.sleep(500); } catch (Exception e) {}             
-                startNewEpisode();
-            } else {
-                System.out.println(">>> ALL RUNS FINISHED <<<");
-            }
-        } else {
-            updatePercepts("agent1");
-            informAgsEnvironmentChanged();
-        }
         return result;
     }
 
-    // public double getCumulativeReward() {
-    // return cumulativeReward;
-    // }
-
-    public boolean isGoalAchieved() {
-        return goalsDone.contains("painted_chair") && goalsDone.contains("painted_table") && goalsDone.contains("open_door");
-    }
-    
     private boolean move(String direction) {
         Location newPos = (Location) agentPos.clone();
         switch(direction) {
@@ -336,7 +320,7 @@ public class GridEnvironment extends Environment {
                 newPos.x--;
                 break;
         }
-        
+
         if (model.inGrid(newPos) && !model.hasObject(OBSTACLE, newPos)) {
             agentPos = newPos;
             try {
@@ -348,13 +332,13 @@ public class GridEnvironment extends Environment {
         }
         return false;
     }
-    
+
     private boolean pickup(String obj) {
         if (inventory.size() >= 3) {
             System.out.println("PICKUP FAILED: Inventory full (" + inventory.size() + "/3). Holding: " + inventory);
             return false;
         }
-        
+
         Location objLoc = model.objects.get(obj);
 
         if (objLoc == null) {
@@ -371,7 +355,7 @@ public class GridEnvironment extends Environment {
         System.out.println("PICKUP FAILED: Agent not at object location. Agent: " + agentPos + ", Object: " + objLoc);
         return false;
     }
-    
+
     private boolean drop(String obj) {
         if (inventory.contains(obj)) {
             inventory.remove(obj);
@@ -381,7 +365,7 @@ public class GridEnvironment extends Environment {
         }
         return false;
     }
-    
+
     private boolean openDoor() {
         Location doorLoc = model.objects.get("door");
         if (agentPos.equals(doorLoc) && inventory.contains("key") && inventory.contains("code")) {
@@ -390,7 +374,7 @@ public class GridEnvironment extends Environment {
         }
         return false;
     }
-    
+
     private boolean paint(String obj) {
         Location objLoc = model.objects.get(obj);
         if (agentPos.equals(objLoc) && inventory.contains("brush") && inventory.contains("color")) {
@@ -400,53 +384,47 @@ public class GridEnvironment extends Environment {
         return false;
     }
 
-    //* Helper function: Remove surrounding quotes from a Term string (if needed)
     private String termToId(Term t) {
         String s = t.toString();
         if (s.startsWith("'") && s.endsWith("'")) s = s.substring(1, s.length() - 1);
         return s;
     }
-    
+
     private void updatePercepts(String agName) {
         clearPercepts(agName);
 
         Location l = model.getAgPos(0);
-        int count = 0;
 
         //* Add episode percept
         addPercept(agName, Literal.parseLiteral("episode(" + currentEpisode + ")"));
-        
+
         //* Add position percept
         addPercept(agName, Literal.parseLiteral("pos(" + l.x + "," + l.y + ")"));
-        count++;
-        
+
         //* Add inventory percepts
         for(String item : inventory) {
             addPercept(agName, Literal.parseLiteral("holding(" + item + ")"));
-            count++;
         }
-        
-        //* Add nearby objects
+
+        //* Add nearby objects percepts
         for (Map.Entry<String, Location> entry : model.objects.entrySet()) {
             String objName = entry.getKey();
             Location loc = entry.getValue();
             if (!inventory.contains(objName)) {
                 addPercept(agName, Literal.parseLiteral("at(" + objName + "," + loc.x + "," + loc.y + ")"));
             }
-    }
+        }
 
         //* Add obstacle percepts
         for(Location obs : obstacles) {
             addPercept(agName, Literal.parseLiteral("obstacle(" + obs.x + "," + obs.y + ")"));
-            count++;
         }
-        
+
         //* Add goal percepts
         for(String goal : goalsDone) {
             addPercept(agName, Literal.parseLiteral(goal));
-            count++;
         }
-        
-        System.out.println("Updated percepts, total count: " + count);
+
+        // System.out.println("Updated percepts");
     }
 }

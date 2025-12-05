@@ -9,7 +9,8 @@ import java.util.*;
 
 /* 
  * Internal action that calculates the path (as a list of steps) between two points in the grid.
- * If no path exists, returns false.
+ ? Returns the path as a list of "up", "down", "left", "right" strings.
+ ! If no path exists, returns false.
  */
 public class PathTo extends DefaultInternalAction {
 
