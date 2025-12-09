@@ -1,11 +1,7 @@
-is_needed_for(brush, painting).
-is_needed_for(color, painting).
-is_needed_for(key, door).
-is_needed_for(code, door).
-
 !start.
 
-+episode(Ep) : Ep > 10
+//? Check for max episodes
++episode(Ep) : Ep > 100
    <- .print(">>> MAX RUNS REACHED (", Ep-1, "). Stopping agent. <<<").
 
 +episode(Ep) : true 
@@ -17,6 +13,7 @@ is_needed_for(code, door).
       .abolish(tool_order(_, _));
       !start.
 
+//? Main control loop
 +!start : true
    <- .print("Waiting for synchronization...");
       .wait(pos(0, 4));
@@ -156,7 +153,7 @@ is_needed_for(code, door).
    <- .print(">>> SUCCESS: All missions accomplished! <<<");
       actions.CalculateEpisodeScore(C, FinalScore);
       .print("Final score for this run: ", FinalScore);
-      .wait(500);
+      .wait(200);
       finish_episode.
 
 +!run_phase(painting) : not painted_chair | not painted_table
@@ -204,6 +201,11 @@ is_needed_for(code, door).
 //? ================================================================== */
 //? HELPERS                                                            */
 //? ================================================================== */
+
+is_needed_for(brush, painting).
+is_needed_for(color, painting).
+is_needed_for(key, door).
+is_needed_for(code, door).
 
 +!go_to(X, Y) : pos(X, Y).
 +!go_to(Tx, Ty) : pos(Sx, Sy) <- actions.PathTo(Sx, Sy, Tx, Ty, PathList); !execute_path(PathList).

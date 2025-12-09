@@ -30,7 +30,7 @@ public class GridEnvironment extends Environment {
     private static int episodeCount = 0;
 
     private int currentEpisode = 1;
-    private final int MAX_EPISODES = 10;
+    private final int MAX_EPISODES = 100;
     private Random random = new Random();
 
     public static int getWidth() { return W; }
@@ -85,7 +85,7 @@ public class GridEnvironment extends Environment {
         currentEpisode++;
 
         if (currentEpisode <= MAX_EPISODES) {
-            try { Thread.sleep(500); } catch (Exception e) {}
+            // try { Thread.sleep(500); } catch (Exception e) {}
             startNewEpisode();
         } else {
             printFinalStatistics();
