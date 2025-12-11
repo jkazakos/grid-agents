@@ -21,8 +21,13 @@ public class PathCost extends DefaultInternalAction {
         int x, y;
         int g, f;
         Node parent;
+
         Node(int x, int y, int g, int f, Node p) {
-            this.x = x; this.y = y; this.g = g; this.f = f; this.parent = p;
+            this.x = x;
+            this.y = y;
+            this.g = g;
+            this.f = f;
+            this.parent = p;
         }
     }
 
@@ -35,13 +40,14 @@ public class PathCost extends DefaultInternalAction {
 
         Integer cost = aStarCost(x1, y1, x2, y2);
         if (cost == null) {
-            return un.unifies(args[4], new NumberTermImpl(9999)); //! Very high cost for no path => Don't choose this
+            return un.unifies(args[4], new NumberTermImpl(9999)); // ! Very high cost for no path => Don't choose this
         }
         return un.unifies(args[4], new NumberTermImpl(cost));
     }
 
     private Integer aStarCost(int sx, int sy, int tx, int ty) {
-        if (GridEnvironment.isBlocked(tx, ty)) return null;
+        if (GridEnvironment.isBlocked(tx, ty))
+            return null;
 
         int W = GridEnvironment.getWidth();
         int H = GridEnvironment.getHeight();
@@ -55,16 +61,20 @@ public class PathCost extends DefaultInternalAction {
         while (!open.isEmpty()) {
             Node cur = open.poll();
             if (cur.x == tx && cur.y == ty) {
-                return cur.g; //* path length in steps
+                return cur.g; // * path length in steps
             }
-            if (closed[cur.x][cur.y]) continue;
+            if (closed[cur.x][cur.y])
+                continue;
             closed[cur.x][cur.y] = true;
 
             for (int[] d : DIRS) {
                 int nx = cur.x + d[0], ny = cur.y + d[1];
-                if (nx < 0 || ny < 0 || nx >= W || ny >= H) continue;
-                if (GridEnvironment.isBlocked(nx, ny)) continue;
-                if (closed[nx][ny]) continue;
+                if (nx < 0 || ny < 0 || nx >= W || ny >= H)
+                    continue;
+                if (GridEnvironment.isBlocked(nx, ny))
+                    continue;
+                if (closed[nx][ny])
+                    continue;
                 int ng = cur.g + 1;
                 int nf = ng + manhattan(nx, ny, tx, ty);
                 open.add(new Node(nx, ny, ng, nf, cur));
@@ -78,6 +88,6 @@ public class PathCost extends DefaultInternalAction {
     }
 
     private static final int[][] DIRS = {
-        {1, 0}, {-1, 0}, {0, 1}, {0, -1}
+            { 1, 0 }, { -1, 0 }, { 0, 1 }, { 0, -1 }
     };
 }

@@ -9,16 +9,19 @@ import java.util.*;
 import java.awt.Color;
 import java.awt.Graphics;
 
-//* Class that defines a grid world environment for an agent.
+// * Class that defines a grid world environment for an agent.
 public class GridEnvironment extends Environment {
 
-    private static int W =5, H =5, nbAgs = 1;
+    private static int W = 5, H = 5, nbAgs = 1;
 
     public static final int OBSTACLE = 8;
-    public static final int TOOL = 16;
-    public static final int DOOR = 32;
-    public static final int TABLE = 64;
-    public static final int CHAIR = 128;
+    public static final int DOOR = 16;
+    public static final int TABLE = 32;
+    public static final int CHAIR = 64;
+    public static final int BRUSH = 128;
+    public static final int COLOR = 256;
+    public static final int KEY = 512;
+    public static final int CODE = 1024;
 
     private MyModel model;
     private Location agentPos;
@@ -33,12 +36,33 @@ public class GridEnvironment extends Environment {
     private final int MAX_EPISODES = 100;
     private Random random = new Random();
 
-    public static int getWidth() { return W; }
-    public static int getHeight() { return H; }
+    public static int getWidth() {
+        return W;
+    }
+
+    public static int getHeight() {
+        return H;
+    }
 
     public static void addEpisodeScore(double score) {
         totalScore += score;
         episodeCount++;
+    }
+
+    // * Converts object name to its corresponding bitmask
+    private int getMask(String obj) {
+        switch (obj) {
+            case "brush":
+                return BRUSH;
+            case "color":
+                return COLOR;
+            case "key":
+                return KEY;
+            case "code":
+                return CODE;
+            default:
+                return 0; // ! Not a valid tool
+        }
     }
 
     @Override
@@ -72,7 +96,10 @@ public class GridEnvironment extends Environment {
 
         agentPos = new Location(0, 4);
 
-        try { model.setAgPos(0, agentPos); } catch (Exception e) {}
+        try {
+            model.setAgPos(0, agentPos);
+        } catch (Exception e) {
+        }
         model.resetObjects();
 
         updatePercepts("agent1");
@@ -81,7 +108,7 @@ public class GridEnvironment extends Environment {
 
     private void triggerNextEpisode() {
         System.out.println("SUCCESS! Agent completed Episode " + currentEpisode);
-    
+
         currentEpisode++;
 
         if (currentEpisode <= MAX_EPISODES) {
@@ -95,7 +122,7 @@ public class GridEnvironment extends Environment {
     private static void printFinalStatistics() {
         double averageScore = (double) totalScore / (double) episodeCount;
         double utility = averageScore;
-        
+
         System.out.println("#############################################");
         System.out.println("      EXPERIMENT COMPLETE (" + episodeCount + " EPISODES)     ");
         System.out.println("      Average Expected Utility: " + utility);
@@ -112,12 +139,12 @@ public class GridEnvironment extends Environment {
             int y = random.nextInt(H);
             loc = new Location(x, y);
 
-            //* Constraint 1: Check against forbidden locations
+            // * Constraint 1: Check against forbidden locations
             if (forbidden.contains(loc)) {
                 isBlocked = true;
             }
 
-            //* Constraint 2: Double check the model for static obstacles
+            // * Constraint 2: Double check the model for static obstacles
             if (!model.isFree(loc)) {
                 isBlocked = true;
             }
@@ -139,23 +166,27 @@ public class GridEnvironment extends Environment {
         public void draw(Graphics g, int x, int y, int object) {
             if ((object & OBSTACLE) != 0) {
                 drawObstacle(g, x, y);
-                return;
-            }
-            if ((object & TOOL) != 0) {
-                drawTools(g, x, y);
-                return;
             }
             if ((object & DOOR) != 0) {
                 drawDoor(g, x, y);
-                return;
             }
             if ((object & TABLE) != 0) {
                 drawTable(g, x, y);
-                return;
             }
             if ((object & CHAIR) != 0) {
                 drawChair(g, x, y);
-                return;
+            }
+            if ((object & BRUSH) != 0) {
+                drawBrush(g, x, y);
+            }
+            if ((object & KEY) != 0) {
+                drawKey(g, x, y);
+            }
+            if ((object & CODE) != 0) {
+                drawCode(g, x, y);
+            }
+            if ((object & COLOR) != 0) {
+                drawColor(g, x, y);
             }
 
             super.draw(g, x, y, object);
@@ -168,27 +199,46 @@ public class GridEnvironment extends Environment {
             g.fillRect(x * cellSizeW + 1, y * cellSizeH + 1, cellSizeW - 2, cellSizeH - 2);
         }
 
-        public void drawTools(Graphics g, int x, int y) {
+        public void drawTool(Graphics g, int x, int y, String string) {
+            g.setColor(Color.red);
+            g.drawRect(x * cellSizeW + 1, y * cellSizeH + 1, cellSizeW - 2, cellSizeH - 2);
+            g.setColor(Color.red);
+            g.drawString(string, x * cellSizeW + 10, y * cellSizeH + 20);
+        }
+
+        public void drawGoal(Graphics g, int x, int y, String string) {
             g.setColor(Color.YELLOW);
             g.fillRect(x * cellSizeW + 1, y * cellSizeH + 1, cellSizeW - 2, cellSizeH - 2);
+            g.setColor(Color.BLACK);
+            g.drawString(string, x * cellSizeW + (cellSizeW / 2) - 4, y * cellSizeH + (cellSizeH / 2) + 4);
+        }
+
+        public void drawBrush(Graphics g, int x, int y) {
+            drawTool(g, x, y, "B");
+        }
+
+        public void drawKey(Graphics g, int x, int y) {
+            drawTool(g, x, y, "K");
+        }
+
+        public void drawCode(Graphics g, int x, int y) {
+            drawTool(g, x, y, "Cd");
+        }
+
+        public void drawColor(Graphics g, int x, int y) {
+            drawTool(g, x, y, "Cl");
         }
 
         public void drawDoor(Graphics g, int x, int y) {
-            g.setColor(Color.RED);
-            g.drawRect(x * cellSizeW + 2, y * cellSizeH + 2, cellSizeW - 4, cellSizeH - 4);
-            g.drawString("D", x * cellSizeW + (cellSizeW/2) - 4, y * cellSizeH + (cellSizeH/2) + 4);
+            drawGoal(g, x, y, "D");
         }
 
         public void drawTable(Graphics g, int x, int y) {
-            g.setColor(Color.RED);
-            g.drawRect(x * cellSizeW + 2, y * cellSizeH + 2, cellSizeW - 4, cellSizeH - 4);
-            g.drawString("T", x * cellSizeW + (cellSizeW/2) - 4, y * cellSizeH + (cellSizeH/2) + 4);
+            drawGoal(g, x, y, "T");
         }
 
         public void drawChair(Graphics g, int x, int y) {
-            g.setColor(Color.RED);
-            g.drawRect(x * cellSizeW + 2, y * cellSizeH + 2, cellSizeW - 4, cellSizeH - 4);
-            g.drawString("Ch", x * cellSizeW + (cellSizeW/2) - 4, y * cellSizeH + (cellSizeH/2) + 4);
+            drawGoal(g, x, y, "Ch");
         }
     }
 
@@ -201,9 +251,12 @@ public class GridEnvironment extends Environment {
         }
 
         public void resetObjects() {
-            for(int i=0; i<W; i++){
-                for(int j=0; j<H; j++){
-                    remove(TOOL, i, j);
+            for (int i = 0; i < W; i++) {
+                for (int j = 0; j < H; j++) {
+                    remove(BRUSH, i, j);
+                    remove(KEY, i, j);
+                    remove(CODE, i, j);
+                    remove(COLOR, i, j);
                     remove(DOOR, i, j);
                     remove(CHAIR, i, j);
                     remove(TABLE, i, j);
@@ -215,8 +268,8 @@ public class GridEnvironment extends Environment {
             forbidden.add(new Location(0, 4));
 
             Location brushLoc = new Location(0, 0);
-            Location keyLoc   = new Location(0, 1);
-            Location codeLoc  = new Location(2, 0);
+            Location keyLoc = new Location(0, 1);
+            Location codeLoc = new Location(2, 0);
             Location colorLoc = new Location(4, 0);
 
             forbidden.add(brushLoc);
@@ -224,7 +277,7 @@ public class GridEnvironment extends Environment {
             forbidden.add(codeLoc);
             forbidden.add(colorLoc);
 
-            //* Reset logic map
+            // * Reset logic map
             objects.clear();
             objects.put("brush", new Location(0, 0));
             objects.put("key", new Location(0, 1));
@@ -234,24 +287,24 @@ public class GridEnvironment extends Environment {
             objects.put("chair", new Location(3, 3));
             objects.put("table", new Location(4, 4));
 
-            add(TOOL, 0, 0);
-            add(TOOL, 0, 1);
-            add(TOOL, 2, 0);
-            add(TOOL, 4, 0);
+            add(BRUSH, 0, 0);
+            add(KEY, 0, 1);
+            add(CODE, 2, 0);
+            add(COLOR, 4, 0);
 
-            //* Place Door
+            // * Place Door
             Location doorLoc = getFreeLocation(forbidden);
             objects.put("door", doorLoc);
             add(DOOR, doorLoc.x, doorLoc.y);
             forbidden.add(doorLoc);
 
-            //* Place Chair
+            // * Place Chair
             Location chairLoc = getFreeLocation(forbidden);
             objects.put("chair", chairLoc);
             add(CHAIR, chairLoc.x, chairLoc.y);
             forbidden.add(chairLoc);
 
-            //* Place Table
+            // * Place Table
             Location tableLoc = getFreeLocation(forbidden);
             objects.put("table", tableLoc);
             add(TABLE, tableLoc.x, tableLoc.y);
@@ -264,19 +317,23 @@ public class GridEnvironment extends Environment {
     }
 
     public static boolean isBlocked(int x, int y) {
-        if (x < 0 || y < 0 || x >= W || y >= H) return true;
+        if (x < 0 || y < 0 || x >= W || y >= H)
+            return true;
         return obstacles != null && obstacles.contains(new Location(x, y));
     }
 
     @Override
     public boolean executeAction(String agName, Structure action) {
 
-        // try { Thread.sleep(300); } catch (Exception e) {} //* Pauses for better visualization
+        try {
+            Thread.sleep(300);
+        } catch (Exception e) {
+        } // * Pauses for better visualization
 
         String actName = action.getFunctor();
         boolean result = false;
 
-        switch(actName) {
+        switch (actName) {
             case "move":
                 result = move(termToId(action.getTerm(0)));
                 break;
@@ -306,12 +363,12 @@ public class GridEnvironment extends Environment {
 
     private boolean move(String direction) {
         Location newPos = (Location) agentPos.clone();
-        switch(direction) {
+        switch (direction) {
             case "up":
-                newPos.y--; //* Y axis is inverted in GridWorld
+                newPos.y--; // * Y axis is inverted in GridWorld
                 break;
             case "down":
-                newPos.y++; //* Y axis is inverted in GridWorld
+                newPos.y++; // * Y axis is inverted in GridWorld
                 break;
             case "right":
                 newPos.x++;
@@ -342,13 +399,19 @@ public class GridEnvironment extends Environment {
         Location objLoc = model.objects.get(obj);
 
         if (objLoc == null) {
-             System.out.println("PICKUP ERROR: Object " + obj + " does not exist in model.");
-             return false;
+            System.out.println("PICKUP ERROR: Object " + obj + " does not exist in model.");
+            return false;
+        }
+
+        int mask = getMask(obj);
+        if (mask == 0) {
+            System.out.println("PICKUP ERROR: " + obj + " is not a pickup-able tool.");
+            return false;
         }
 
         if (agentPos.equals(objLoc)) {
             inventory.add(obj);
-            model.remove(TOOL, objLoc.x, objLoc.y);
+            model.remove(mask, objLoc.x, objLoc.y);
             return true;
         }
 
@@ -358,9 +421,13 @@ public class GridEnvironment extends Environment {
 
     private boolean drop(String obj) {
         if (inventory.contains(obj)) {
+            int mask = getMask(obj);
+            if (mask == 0)
+                return false;
+
             inventory.remove(obj);
-            model.add(TOOL, agentPos.x, agentPos.y);
-            model.objects.put(obj, (Location)agentPos.clone());
+            model.add(mask, agentPos.x, agentPos.y);
+            model.objects.put(obj, (Location) agentPos.clone());
             return true;
         }
         return false;
@@ -386,7 +453,8 @@ public class GridEnvironment extends Environment {
 
     private String termToId(Term t) {
         String s = t.toString();
-        if (s.startsWith("'") && s.endsWith("'")) s = s.substring(1, s.length() - 1);
+        if (s.startsWith("'") && s.endsWith("'"))
+            s = s.substring(1, s.length() - 1);
         return s;
     }
 
@@ -395,18 +463,18 @@ public class GridEnvironment extends Environment {
 
         Location l = model.getAgPos(0);
 
-        //* Add episode percept
+        // * Add episode percept
         addPercept(agName, Literal.parseLiteral("episode(" + currentEpisode + ")"));
 
-        //* Add position percept
+        // * Add position percept
         addPercept(agName, Literal.parseLiteral("pos(" + l.x + "," + l.y + ")"));
 
-        //* Add inventory percepts
-        for(String item : inventory) {
+        // * Add inventory percepts
+        for (String item : inventory) {
             addPercept(agName, Literal.parseLiteral("holding(" + item + ")"));
         }
 
-        //* Add nearby objects percepts
+        // * Add nearby objects percepts
         for (Map.Entry<String, Location> entry : model.objects.entrySet()) {
             String objName = entry.getKey();
             Location loc = entry.getValue();
@@ -415,13 +483,13 @@ public class GridEnvironment extends Environment {
             }
         }
 
-        //* Add obstacle percepts
-        for(Location obs : obstacles) {
+        // * Add obstacle percepts
+        for (Location obs : obstacles) {
             addPercept(agName, Literal.parseLiteral("obstacle(" + obs.x + "," + obs.y + ")"));
         }
 
-        //* Add goal percepts
-        for(String goal : goalsDone) {
+        // * Add goal percepts
+        for (String goal : goalsDone) {
             addPercept(agName, Literal.parseLiteral(goal));
         }
     }

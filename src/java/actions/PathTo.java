@@ -18,8 +18,13 @@ public class PathTo extends DefaultInternalAction {
         int x, y;
         int g, f;
         Node parent;
+
         Node(int x, int y, int g, int f, Node p) {
-            this.x = x; this.y = y; this.g = g; this.f = f; this.parent = p;
+            this.x = x;
+            this.y = y;
+            this.g = g;
+            this.f = f;
+            this.parent = p;
         }
     }
 
@@ -70,15 +75,22 @@ public class PathTo extends DefaultInternalAction {
         Node end = null;
         while (!open.isEmpty()) {
             Node cur = open.poll();
-            if (cur.x == tx && cur.y == ty) { end = cur; break; }
-            if (closed[cur.x][cur.y]) continue;
+            if (cur.x == tx && cur.y == ty) {
+                end = cur;
+                break;
+            }
+            if (closed[cur.x][cur.y])
+                continue;
             closed[cur.x][cur.y] = true;
 
             for (int i = 0; i < DIRS.length; i++) {
                 int nx = cur.x + DIRS[i][0], ny = cur.y + DIRS[i][1];
-                if (nx < 0 || ny < 0 || nx >= W || ny >= H) continue;
-                if (GridEnvironment.isBlocked(nx, ny)) continue;
-                if (closed[nx][ny]) continue;
+                if (nx < 0 || ny < 0 || nx >= W || ny >= H)
+                    continue;
+                if (GridEnvironment.isBlocked(nx, ny))
+                    continue;
+                if (closed[nx][ny])
+                    continue;
                 int ng = cur.g + 1;
                 int nf = ng + manhattan(nx, ny, tx, ty);
                 Node n = new Node(nx, ny, ng, nf, cur);
@@ -88,7 +100,8 @@ public class PathTo extends DefaultInternalAction {
             }
         }
 
-        if (end == null) return null;
+        if (end == null)
+            return null;
 
         // * reconstruct steps (reverse)
         List<String> rev = new ArrayList<>();
@@ -104,12 +117,16 @@ public class PathTo extends DefaultInternalAction {
     }
 
     private static String dir(int x1, int y1, int x2, int y2) {
-        if (x2 == x1 + 1 && y2 == y1) return "right";
-        if (x2 == x1 - 1 && y2 == y1) return "left";
-        if (y2 == y1 + 1 && x2 == x1) return "down";
-        if (y2 == y1 - 1 && x2 == x1) return "up";
+        if (x2 == x1 + 1 && y2 == y1)
+            return "right";
+        if (x2 == x1 - 1 && y2 == y1)
+            return "left";
+        if (y2 == y1 + 1 && x2 == x1)
+            return "down";
+        if (y2 == y1 - 1 && x2 == x1)
+            return "up";
         System.out.println("dir: invalid move from (" + x1 + "," + y1 + ") to (" + x2 + "," + y2 + ")");
-        return "right"; //! fallback; should not happen
+        return "right"; // ! fallback; should not happen
     }
 
     private static int manhattan(int x1, int y1, int x2, int y2) {
@@ -117,6 +134,6 @@ public class PathTo extends DefaultInternalAction {
     }
 
     private static final int[][] DIRS = {
-        {1, 0}, {-1, 0}, {0, 1}, {0, -1}
+            { 1, 0 }, { -1, 0 }, { 0, 1 }, { 0, -1 }
     };
 }
