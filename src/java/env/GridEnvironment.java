@@ -9,7 +9,7 @@ import java.util.*;
 import java.awt.Color;
 import java.awt.Graphics;
 
-// * Class that defines a grid world environment for an agent.
+// Class that defines a grid world environment for an agent.
 public class GridEnvironment extends Environment {
 
     private static int W = 5, H = 5, nbAgs = 1;
@@ -33,7 +33,7 @@ public class GridEnvironment extends Environment {
     private static int episodeCount = 0;
 
     private int currentEpisode = 1;
-    private final int MAX_EPISODES = 100;
+    private final int MAX_EPISODES = 10;
     private Random random = new Random();
 
     public static int getWidth() {
@@ -49,7 +49,7 @@ public class GridEnvironment extends Environment {
         episodeCount++;
     }
 
-    // * Converts object name to its corresponding bitmask
+    // Converts object name to its corresponding bitmask
     private int getMask(String obj) {
         switch (obj) {
             case "brush":
@@ -61,7 +61,7 @@ public class GridEnvironment extends Environment {
             case "code":
                 return CODE;
             default:
-                return 0; // ! Not a valid tool
+                return 0; //  Not a valid tool
         }
     }
 
@@ -139,12 +139,12 @@ public class GridEnvironment extends Environment {
             int y = random.nextInt(H);
             loc = new Location(x, y);
 
-            // * Constraint 1: Check against forbidden locations
+            // Constraint 1: Check against forbidden locations
             if (forbidden.contains(loc)) {
                 isBlocked = true;
             }
 
-            // * Constraint 2: Double check the model for static obstacles
+            // Constraint 2: Double check the model for static obstacles
             if (!model.isFree(loc)) {
                 isBlocked = true;
             }
@@ -277,7 +277,7 @@ public class GridEnvironment extends Environment {
             forbidden.add(codeLoc);
             forbidden.add(colorLoc);
 
-            // * Reset logic map
+            // Reset logic map
             objects.clear();
             objects.put("brush", new Location(0, 0));
             objects.put("key", new Location(0, 1));
@@ -292,19 +292,19 @@ public class GridEnvironment extends Environment {
             add(CODE, 2, 0);
             add(COLOR, 4, 0);
 
-            // * Place Door
+            // Place Door
             Location doorLoc = getFreeLocation(forbidden);
             objects.put("door", doorLoc);
             add(DOOR, doorLoc.x, doorLoc.y);
             forbidden.add(doorLoc);
 
-            // * Place Chair
+            // Place Chair
             Location chairLoc = getFreeLocation(forbidden);
             objects.put("chair", chairLoc);
             add(CHAIR, chairLoc.x, chairLoc.y);
             forbidden.add(chairLoc);
 
-            // * Place Table
+            // Place Table
             Location tableLoc = getFreeLocation(forbidden);
             objects.put("table", tableLoc);
             add(TABLE, tableLoc.x, tableLoc.y);
@@ -328,7 +328,7 @@ public class GridEnvironment extends Environment {
         try {
             Thread.sleep(300);
         } catch (Exception e) {
-        } // * Pauses for better visualization
+        } // Pauses for better visualization
 
         String actName = action.getFunctor();
         boolean result = false;
@@ -365,10 +365,10 @@ public class GridEnvironment extends Environment {
         Location newPos = (Location) agentPos.clone();
         switch (direction) {
             case "up":
-                newPos.y--; // * Y axis is inverted in GridWorld
+                newPos.y--; // Y axis is inverted in GridWorld
                 break;
             case "down":
-                newPos.y++; // * Y axis is inverted in GridWorld
+                newPos.y++; // Y axis is inverted in GridWorld
                 break;
             case "right":
                 newPos.x++;
@@ -463,18 +463,18 @@ public class GridEnvironment extends Environment {
 
         Location l = model.getAgPos(0);
 
-        // * Add episode percept
+        // Add episode percept
         addPercept(agName, Literal.parseLiteral("episode(" + currentEpisode + ")"));
 
-        // * Add position percept
+        // Add position percept
         addPercept(agName, Literal.parseLiteral("pos(" + l.x + "," + l.y + ")"));
 
-        // * Add inventory percepts
+        // Add inventory percepts
         for (String item : inventory) {
             addPercept(agName, Literal.parseLiteral("holding(" + item + ")"));
         }
 
-        // * Add nearby objects percepts
+        // Add nearby objects percepts
         for (Map.Entry<String, Location> entry : model.objects.entrySet()) {
             String objName = entry.getKey();
             Location loc = entry.getValue();
@@ -483,12 +483,12 @@ public class GridEnvironment extends Environment {
             }
         }
 
-        // * Add obstacle percepts
+        // Add obstacle percepts
         for (Location obs : obstacles) {
             addPercept(agName, Literal.parseLiteral("obstacle(" + obs.x + "," + obs.y + ")"));
         }
 
-        // * Add goal percepts
+        // Add goal percepts
         for (String goal : goalsDone) {
             addPercept(agName, Literal.parseLiteral(goal));
         }
