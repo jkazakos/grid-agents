@@ -6,6 +6,7 @@ task(paint_chair, painting, chair, [brush, color]).
 task(open_door, opening,  door,  [key, code]).
 
 completed(none).
+episode_cost(0).
 
 !start.
 
@@ -18,6 +19,7 @@ completed(none).
       .drop_all_intentions;
       .abolish(holding(_));
       .abolish(completed(_));
+      -+episode_cost(0);
       !start.
 
 //? === CONTROL LOOP === */
@@ -41,8 +43,12 @@ completed(none).
       .findall(id(ID, Type, Target, Tools), task(ID, Type, Target, Tools) & not completed(ID), PendingTasks);
       // Calculate cost for available tasks
       !evaluate_options(PendingTasks, BestTaskID, BestCost);
-      // Execute the winner
       .print("Best option found: ", BestTaskID, " with cost ", BestCost);
+      // Update episode cost
+      ?episode_cost(CurrentCost);
+      NewCost = CurrentCost + BestCost;
+      -+episode_cost(NewCost);
+      // Execute the best task
       !execute_task(BestTaskID);
       // Loop
       !decide_next_action.
@@ -52,12 +58,13 @@ completed(none).
 // No options left
 +!evaluate_options([], none, 99999).
 
-// TODO: Fix this
 // Evaluate options recursively
 +!evaluate_options([id(ID, Type, Target, Tools)|Rest], BestID, MinCost)
    <- 
       // Calculate cost for current task
       !calculate_task_cost(Target, Tools, CurrentCost);
+      // Print cost for debugging
+      .print("Evaluated task ", ID, " with cost ", CurrentCost);
       // Evaluate the rest
       !evaluate_options(Rest, RecID, RecCost);
       // Compare and select the best
@@ -99,10 +106,8 @@ completed(none).
    <- 
       // Sequence A: T1 -> T2 -> Target
       !calc_trip_sequence(T1, T2, Ax, Ay, Tx, Ty, CostA);
-
       // Sequence B: T2 -> T1 -> Target
       !calc_trip_sequence(T2, T1, Ax, Ay, Tx, Ty, CostB);
-
       .min([CostA, CostB], FinalCost).
 
 // Helper for Case 3
@@ -110,19 +115,15 @@ completed(none).
    <- 
       ?at(First, Fx, Fy);
       ?at(Second, Sx, Sy);
-
       // Leg 1: Agent -> First Tool
       actions.PathCost(Ax, Ay, Fx, Fy, D1);
-      C1 = D1;
-
       // Leg 2: First -> Second Tool
       actions.PathCost(Fx, Fy, Sx, Sy, D2);
-      C2 = 2 * D2;
-
       // Leg 3: Second -> Target
       actions.PathCost(Sx, Sy, Tx, Ty, D3);
+      C1 = D1;
+      C2 = 2 * D2;
       C3 = 4 * D3;
-
       TotalCost = C1 + C2 + C3.
 
 //? === EXECUTION LOGIC === */
@@ -134,17 +135,13 @@ completed(none).
       
       // Manage inventory
       !prepare_inventory(Tools);
-      
       // Go to target
       ?at(Target, Tx, Ty);
       !go_to(Tx, Ty);
-      
       // Do the task
       !perform_action(Type, Target);
-      
       // Update the task as completed
       +completed(ID);
-
       // *** MULTI-AGENT HOOK ***
       // .broadcast(tell, task_completed(ID));  <-- Broadcast to other agents
       .print("Task ", ID, " completed.").
@@ -156,7 +153,6 @@ completed(none).
       // Drop unneeded items
       .findall(Item, holding(Item), CurrentItems);
       !drop_unneeded(CurrentItems, RequiredTools);
-      
       // Pick up missing tools
       !acquire_missing(RequiredTools).
 
@@ -193,8 +189,13 @@ completed(none).
 +!move_path([]).
 +!move_path([M|Rest]) <- move(M); !move_path(Rest).
 
-+!finish_episode 
-   <- .print("EPISODE FINISHED");
++!finish_episode
+   <- 
+      ?episode_cost(C);
+      actions.CalculateEpisodeScore(C, Score);
+      .print("EPISODE FINISHED");
+      .print("Episode Score: ", Score);
+      .wait(200);
       finish_episode.
 
 // Compare and select the better option

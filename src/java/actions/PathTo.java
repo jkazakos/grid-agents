@@ -43,7 +43,7 @@ public class PathTo extends DefaultInternalAction {
                 return false;
             }
 
-            System.out.println("PathTo: path found with " + steps.size() + " steps: " + steps);
+            // System.out.println("PathTo: path found with " + steps.size() + " steps: " + steps);
             ListTerm list = new ListTermImpl();
             for (String s : steps) {
                 list.add(new Atom(s));
@@ -112,7 +112,7 @@ public class PathTo extends DefaultInternalAction {
             cur = cur.parent;
         }
         Collections.reverse(rev);
-        System.out.println("PathTo: reconstructed path: " + rev);
+        // System.out.println("PathTo: reconstructed path: " + rev);
         return rev;
     }
 

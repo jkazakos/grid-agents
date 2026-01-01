@@ -325,10 +325,7 @@ public class GridEnvironment extends Environment {
     @Override
     public boolean executeAction(String agName, Structure action) {
 
-        try {
-            Thread.sleep(300);
-        } catch (Exception e) {
-        } // Pauses for better visualization
+        // try { Thread.sleep(300); } catch (Exception e) {} // Pauses for better visualization
 
         String actName = action.getFunctor();
         boolean result = false;
