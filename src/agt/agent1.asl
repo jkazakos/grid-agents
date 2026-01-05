@@ -1,4 +1,4 @@
-//? === INITIAL BELIEFS === */
+//? INITIAL BELIEFS AND GOALS
 
 // Tasks: task(ID, Type, Target, [RequiredTools])
 task(paint_table, painting, table, [brush, color]).
@@ -7,10 +7,14 @@ task(open_door, opening,  door,  [key, code]).
 
 completed(none).
 episode_cost(0).
+ignored_tasks([]).
+
+tools_available(Tools)
+   :- not (.member(T, Tools) & not holding(T) & not at(T, _, _)).
+
 
 !start.
 
-// Check for max episodes
 +episode(Ep) : Ep > 10
    <- .print(">>> MAX RUNS REACHED (", Ep-1, "). Stopping agent. <<<").
 
@@ -19,38 +23,109 @@ episode_cost(0).
       .drop_all_intentions;
       .abolish(holding(_));
       .abolish(completed(_));
+      .abolish(ignored_tasks(_));
       -+episode_cost(0);
+      +ignored_tasks([]);
       !start.
 
-//? === CONTROL LOOP === */
-
+//? MAIN CONTROL LOOP
 +!start : true
    <- .print("Waiting for environment restart...");
-      .wait(pos(0, 4));
+      .wait(home(Hx, Hy)); // Wait for home percept from environment
+      .wait(pos(Hx, Hy));
       .print("Environment restarted. Beginning new episode.");
       !decide_next_action.
 
-// End if no more tasks
-+!decide_next_action 
-   : .count(task(ID,_,_,_) & not completed(ID), 0)
-   <- !finish_episode.
+// If I have no tasks left, wait
++!decide_next_action : .count(task(ID,_,_,_) & not completed(ID), 0)
+   <- .print("I am done. Waiting for episode end...");
+      .wait(2000);
+      !decide_next_action.
 
 // Main decision loop
-+!decide_next_action
-   : task(_, _, _, _)
++!decide_next_action : true
+   <- ?ignored_tasks(Blacklist); // Find candidates
+      .findall(id(ID, Type, Target, Tools), (task(ID, Type, Target, Tools) & not completed(ID) & not .member(Tools, Blacklist) & tools_available(Tools)), Options);
+      !select_best_option(Options).
+
+// No options available
++!select_best_option([])
+   <- .print("No valid tasks available right now. Waiting...");
+      .wait(1000); // Wait for the other agent
+      -+ignored_tasks([]); // Clear list and try again
+      !decide_next_action.
+
+// Options available -> Evaluate and negotiate
++!select_best_option(Options)
+   <- !evaluate_options(Options, BestID, BestCost);
+      .print("My best option: ", BestID, " Cost: ", BestCost);
+      !negotiate(BestID, BestCost).
+
+//? NEGOTIATION PROTOCOL
++!negotiate(MyTask, MyCost)
+   <- .broadcast(tell, propose(MyTask, MyCost));
+      !wait_for_opponent(MyTask, MyCost, OtherTask, OtherCost, Opponent);
+      !compare_utilities(MyTask, MyCost, OtherTask, OtherCost, Opponent). // We pass MyCost to the comparison so we can use it if we win
+
++!wait_for_opponent(MyTask, MyCost, OT, OC, Ag)
+   <- .wait(propose(OT, OC), 1000, _);
+      if (.ground(OT)) {
+         .print("Opponent wants: ", OT);
+      } else {
+         // Timeout: Other agent didn't reply (busy executing). I Win.
+         !handle_outcome(win, MyTask, MyCost);
+      }.
+
++!compare_utilities(MyTask, MyCost, OtherTask, OtherCost, Ag)
+   <- .abolish(propose(_, _));
+      ?task(MyTask, _, _, MyTools);
+      ?task(OtherTask, _, _, OtherTools);
+      .intersection(MyTools, OtherTools, SharedTools);
+      // Case 1: Different task AND tools -> NO CONFLICT
+      if (MyTask \== OtherTask & .empty(SharedTools)) {
+          !handle_outcome(win, MyTask, MyCost);
+      } 
+      // Case 2: Same task OR tools -> CONFLICT -> Compare Costs
+      else {
+          if (MyCost < OtherCost) {
+             !handle_outcome(win, MyTask, MyCost);
+          } 
+          elif (MyCost > OtherCost) {
+             !handle_outcome(lose, MyTask, MyCost);
+          } 
+          else {
+             // Tie -> Default to agent 1
+             .my_name(Me);
+             if (Me == agent1) {
+                !handle_outcome(win, MyTask, MyCost);
+             } else {
+                !handle_outcome(lose, MyTask, MyCost);
+             }
+          }
+      }.
+
+//? OUTCOME HANDLERS
+// I WON: Add Cost & Execute
++!handle_outcome(win, TaskID, Cost)
    <- 
-      // Find all pending tasks
-      .findall(id(ID, Type, Target, Tools), task(ID, Type, Target, Tools) & not completed(ID), PendingTasks);
-      // Calculate cost for available tasks
-      !evaluate_options(PendingTasks, BestTaskID, BestCost);
-      .print("Best option found: ", BestTaskID, " with cost ", BestCost);
-      // Update episode cost
-      ?episode_cost(CurrentCost);
-      NewCost = CurrentCost + BestCost;
-      -+episode_cost(NewCost);
-      // Execute the best task
-      !execute_task(BestTaskID);
-      // Loop
+      .print("Negotiation WON for ", TaskID);
+      ?task(TaskID, _, _, RequiredTools);
+      ?ignored_tasks(List);
+      .concat(List, [RequiredTools], NewList);
+      -+ignored_tasks([]);
+      !execute_task(TaskID);
+      !decide_next_action.
+
+// I LOST: Ignore Task & Retry
++!handle_outcome(lose, TaskID, Cost)
+   <- 
+      .print("Negotiation LOST for ", TaskID, ". Ignoring it temporarily.");
+      ?task(TaskID, _, _, RequiredTools);
+      ?ignored_tasks(List);
+      .concat(List, [RequiredTools], NewList);
+      -+ignored_tasks(NewList);
+      
+      // Loop back immediately to find the NEXT best task
       !decide_next_action.
 
 //? === COST EVALUATION === */
@@ -142,8 +217,7 @@ episode_cost(0).
       !perform_action(Type, Target);
       // Update the task as completed
       +completed(ID);
-      // *** MULTI-AGENT HOOK ***
-      // .broadcast(tell, task_completed(ID));  <-- Broadcast to other agents
+      .broadcast(tell, task_completed(ID));  // Broadcast to other agents
       .print("Task ", ID, " completed.").
 
 //? === INVENTORY & TOOL MANAGER === */
@@ -183,11 +257,31 @@ episode_cost(0).
 
 +!go_to(X, Y) : pos(X, Y).
 +!go_to(Tx, Ty) : pos(Sx, Sy) 
-   <- actions.PathTo(Sx, Sy, Tx, Ty, PathList);
+   <- -+target_destination(Tx, Ty);
+      actions.PathTo(Sx, Sy, Tx, Ty, PathList);
       !move_path(PathList).
 
 +!move_path([]).
-+!move_path([M|Rest]) <- move(M); !move_path(Rest).
++!move_path([M|Rest])
+   <- move(M);
+      !move_path(Rest).
+
+// FAILURE HANDLER: If move(M) fails (returns false)
+-!move_path(Path)
+   <- .print("Movement blocked! Waiting for path to clear...");
+      .random(R);
+      WaitTime = 200 + (R * 800);
+      .wait(WaitTime);
+      ?pos(X, Y);
+      // Move to a random spot to get unstuck
+      .random(DirRand);
+      if (DirRand < 0.25) { move(up); }
+      elif (DirRand < 0.5) { move(down); }
+      elif (DirRand < 0.75) { move(left); }
+      else { move(right); }
+      // Retry going to the target
+      ?target_destination(Tx, Ty);
+      !go_to(Tx, Ty).
 
 +!finish_episode
    <- 
@@ -201,3 +295,8 @@ episode_cost(0).
 // Compare and select the better option
 +!compare_and_select(ID1, C1, ID2, C2, ID1, C1) : C1 <= C2.
 +!compare_and_select(ID1, C1, ID2, C2, ID2, C2) : C2 < C1.
+
+// Listen for completion
++task_completed(ID)
+   <- +completed(ID);
+      .print("Learned from ", Ag, " that task ", ID, " is done.").

@@ -12,7 +12,7 @@ import java.awt.Graphics;
 // Class that defines a grid world environment for an agent.
 public class GridEnvironment extends Environment {
 
-    private static int W = 5, H = 5, nbAgs = 1;
+    private static int W = 5, H = 5, nbAgs = 2;
 
     public static final int OBSTACLE = 8;
     public static final int DOOR = 16;
@@ -24,9 +24,11 @@ public class GridEnvironment extends Environment {
     public static final int CODE = 1024;
 
     private MyModel model;
-    private Location agentPos;
+    private Location agentPos1;
+    private Location agentPos2;
     private static Set<Location> obstacles;
-    private Set<String> inventory;
+    private Set<String> inventory1;
+    private Set<String> inventory2;
     private Set<String> goalsDone;
 
     private static double totalScore = 0.0;
@@ -52,16 +54,11 @@ public class GridEnvironment extends Environment {
     // Converts object name to its corresponding bitmask
     private int getMask(String obj) {
         switch (obj) {
-            case "brush":
-                return BRUSH;
-            case "color":
-                return COLOR;
-            case "key":
-                return KEY;
-            case "code":
-                return CODE;
-            default:
-                return 0; //  Not a valid tool
+            case "brush": return BRUSH;
+            case "color": return COLOR;
+            case "key": return KEY;
+            case "code": return CODE;
+            default: return 0; //  Not a valid tool
         }
     }
 
@@ -80,7 +77,8 @@ public class GridEnvironment extends Environment {
             model.add(OBSTACLE, loc.x, loc.y);
         }
 
-        inventory = new HashSet<>();
+        inventory1 = new HashSet<>();
+        inventory2 = new HashSet<>();
         goalsDone = new HashSet<>();
 
         startNewEpisode();
@@ -91,23 +89,28 @@ public class GridEnvironment extends Environment {
     private void startNewEpisode() {
         System.out.println("--- STARTING EPISODE " + (currentEpisode) + " ---");
 
-        inventory.clear();
+        inventory1.clear();
+        inventory2.clear();
         goalsDone.clear();
 
-        agentPos = new Location(0, 4);
+        agentPos1 = new Location(0, 4);
+        agentPos2 = new Location(2, 2);
 
         try {
-            model.setAgPos(0, agentPos);
-        } catch (Exception e) {
-        }
+            model.setAgPos(0, agentPos1);
+            model.setAgPos(1, agentPos2);
+        } catch (Exception e) {}
         model.resetObjects();
 
         updatePercepts("agent1");
+        updatePercepts("agent2");
         informAgsEnvironmentChanged();
     }
 
-    private void triggerNextEpisode() {
-        System.out.println("SUCCESS! Agent completed Episode " + currentEpisode);
+    private void triggerNextEpisode(String agName) {
+        System.out.println(
+            "SUCCESS! Agent completed Episode " + currentEpisode
+        );
 
         currentEpisode++;
 
@@ -148,7 +151,6 @@ public class GridEnvironment extends Environment {
             if (!model.isFree(loc)) {
                 isBlocked = true;
             }
-
         } while (isBlocked);
 
         return loc;
@@ -312,84 +314,113 @@ public class GridEnvironment extends Environment {
         }
 
         public boolean isFree(Location l) {
-            return inGrid(l) && !hasObject(OBSTACLE, l);
+            if (!inGrid(l)) return false;
+            if (hasObject(OBSTACLE, l)) return false;
+            for (int i = 0; i < nbAgs; i++) {
+                Location agLoc = getAgPos(i);
+                if (agLoc != null && agLoc.equals(l)) {
+                    return false; // Occupied by an agent -> Not free
+                }
+            }
+            return true;
         }
     }
 
     public static boolean isBlocked(int x, int y) {
-        if (x < 0 || y < 0 || x >= W || y >= H)
-            return true;
+        if (x < 0 || y < 0 || x >= W || y >= H) return true;
         return obstacles != null && obstacles.contains(new Location(x, y));
     }
 
     @Override
     public boolean executeAction(String agName, Structure action) {
 
-        // try { Thread.sleep(300); } catch (Exception e) {} // Pauses for better visualization
+        try { Thread.sleep(300); } catch (Exception e) {} // Pauses for better visualization
 
         String actName = action.getFunctor();
         boolean result = false;
 
         switch (actName) {
             case "move":
-                result = move(termToId(action.getTerm(0)));
+                result = move(agName, termToId(action.getTerm(0)));
                 break;
             case "pickup":
-                result = pickup(termToId(action.getTerm(0)));
+                result = pickup(agName, termToId(action.getTerm(0)));
                 break;
             case "drop":
-                result = drop(termToId(action.getTerm(0)));
+                result = drop(agName, termToId(action.getTerm(0)));
                 break;
             case "open_door":
-                result = openDoor();
+                result = openDoor(agName);
                 break;
             case "paint":
-                result = paint(termToId(action.getTerm(0)));
+                result = paint(agName, termToId(action.getTerm(0)));
                 break;
             case "finish_episode":
                 result = true;
-                triggerNextEpisode();
+                triggerNextEpisode(agName);
                 break;
         }
 
         updatePercepts("agent1");
+        updatePercepts("agent2");
         informAgsEnvironmentChanged();
+
+        if (result && goalsDone.size() >= 3) {
+            // Wait a tiny bit so the logs print nicely, then reset
+            try { Thread.sleep(1000); } catch (Exception e) {}
+            triggerNextEpisode(agName);
+        }
 
         return result;
     }
 
-    private boolean move(String direction) {
-        Location newPos = (Location) agentPos.clone();
+    private boolean move(String agName, String direction) {
+        // Identify which agent is moving
+        int agId = -1;
+        if (agName.equals("agent1")) agId = 0;
+        else if (agName.equals("agent2")) agId = 1;
+
+        // Determine current position
+        Location currentPos = model.getAgPos(agId);
+        Location newPos = (Location) currentPos.clone();
+
         switch (direction) {
-            case "up":
-                newPos.y--; // Y axis is inverted in GridWorld
-                break;
-            case "down":
-                newPos.y++; // Y axis is inverted in GridWorld
-                break;
-            case "right":
-                newPos.x++;
-                break;
-            case "left":
-                newPos.x--;
-                break;
+            case "up": newPos.y--; break;
+            case "down": newPos.y++; break;
+            case "right": newPos.x++; break;
+            case "left": newPos.x--; break;
         }
 
-        if (model.inGrid(newPos) && !model.hasObject(OBSTACLE, newPos)) {
-            agentPos = newPos;
-            try {
-                model.setAgPos(0, agentPos);
-            } catch (Exception e) {
-                return false;
+        if (!model.inGrid(newPos)) return false;
+        if (model.hasObject(OBSTACLE, newPos)) return false;
+
+        for (int i = 0; i < 2; i++) {
+            if (i != agId) {
+                Location otherAg = model.getAgPos(i);
+                if (otherAg != null && otherAg.equals(newPos)) {
+                    return false; // Collision detected, move not allowed
+                }
             }
-            return true;
         }
-        return false;
+
+        try {
+            model.setAgPos(agId, newPos);
+            // Update the local variables
+            if (agId == 0) agentPos1 = newPos;
+            if (agId == 1) agentPos2 = newPos;
+        } catch (Exception e) {
+            return false;
+        }
+        return true;
     }
 
-    private boolean pickup(String obj) {
-        if (inventory.size() >= 3) {
-            System.out.println("PICKUP FAILED: Inventory full (" + inventory.size() + "/3). Holding: " + inventory);
+    private boolean pickup(String agName, String obj) {
+        int agId = (agName.equals("agent1")) ? 0 : 1;
+        Set<String> currentInv = getInventory(agId);
+        Location currentPos = model.getAgPos(agId);
+
+        if (currentInv.size() >= 3) {
+            System.out.println("PICKUP FAILED: Inventory full (" + currentInv.size() + "/3). Holding: " + currentInv);
             return false;
         }
 
@@ -406,42 +437,57 @@ public class GridEnvironment extends Environment {
             return false;
         }
 
-        if (agentPos.equals(objLoc)) {
-            inventory.add(obj);
+        if (currentPos.equals(objLoc)) {
+            currentInv.add(obj);
             model.remove(mask, objLoc.x, objLoc.y);
+            System.out.println( "PICKUP SUCCESS: " + agName + " picked up " + obj + ". Inventory now: " + currentInv);
             return true;
         }
 
-        System.out.println("PICKUP FAILED: Agent not at object location. Agent: " + agentPos + ", Object: " + objLoc);
+        System.out.println("PICKUP FAILED: Agent not at object location. " + agName + " is at " + currentPos + ", Object: " + objLoc);
         return false;
     }
 
-    private boolean drop(String obj) {
-        if (inventory.contains(obj)) {
+    private boolean drop(String agName, String obj) {
+        int agId = (agName.equals("agent1")) ? 0 : 1;
+        Set<String> currentInv = getInventory(agId);
+        Location currentPos = model.getAgPos(agId);
+
+        if (currentInv.contains(obj)) {
             int mask = getMask(obj);
-            if (mask == 0)
-                return false;
+            if (mask == 0) return false;
 
-            inventory.remove(obj);
-            model.add(mask, agentPos.x, agentPos.y);
-            model.objects.put(obj, (Location) agentPos.clone());
+            currentInv.remove(obj);
+            model.add(mask, currentPos.x, currentPos.y);
+            model.objects.put(obj, (Location) currentPos.clone());
+            System.out.println(agName + " dropped " + obj);
             return true;
         }
         return false;
     }
 
-    private boolean openDoor() {
+    private boolean openDoor(String agName) {
+        int agId = (agName.equals("agent1")) ? 0 : 1;
+        Set<String> currentInv = getInventory(agId);
+
+        Location currentPos = model.getAgPos(agId);
         Location doorLoc = model.objects.get("door");
-        if (agentPos.equals(doorLoc) && inventory.contains("key") && inventory.contains("code")) {
+
+        if ( currentPos.equals(doorLoc) && currentInv.contains("key") && currentInv.contains("code")) {
             goalsDone.add("open_door");
             return true;
         }
         return false;
     }
 
-    private boolean paint(String obj) {
+    private boolean paint(String agName, String obj) {
+        int agId = (agName.equals("agent1")) ? 0 : 1;
+        Set<String> currentInv = getInventory(agId);
+
+        Location currentPos = model.getAgPos(agId);
         Location objLoc = model.objects.get(obj);
-        if (agentPos.equals(objLoc) && inventory.contains("brush") && inventory.contains("color")) {
+
+        if (currentPos.equals(objLoc) && currentInv.contains("brush") && currentInv.contains("color")) {
             goalsDone.add("painted_" + obj);
             return true;
         }
@@ -455,19 +501,32 @@ public class GridEnvironment extends Environment {
         return s;
     }
 
+    private Set<String> getInventory(int agId) {
+        return (agId == 0) ? inventory1 : inventory2;
+    }
+
     private void updatePercepts(String agName) {
         clearPercepts(agName);
 
-        Location l = model.getAgPos(0);
+        int agId = (agName.equals("agent1")) ? 0 : 1;
+        Location l = model.getAgPos(agId);
+        Set<String> currentInv = getInventory(agId);
 
         // Add episode percept
         addPercept(agName, Literal.parseLiteral("episode(" + currentEpisode + ")"));
+
+        // Add home percept
+        if (agId == 0) {
+            addPercept(agName, Literal.parseLiteral("home(0, 4)")); // Agent 1 Home
+        } else {
+            addPercept(agName, Literal.parseLiteral("home(2, 2)")); // Agent 2 Home
+        }
 
         // Add position percept
         addPercept(agName, Literal.parseLiteral("pos(" + l.x + "," + l.y + ")"));
 
         // Add inventory percepts
-        for (String item : inventory) {
+        for (String item : currentInv) {
             addPercept(agName, Literal.parseLiteral("holding(" + item + ")"));
         }
 
@@ -475,7 +534,8 @@ public class GridEnvironment extends Environment {
         for (Map.Entry<String, Location> entry : model.objects.entrySet()) {
             String objName = entry.getKey();
             Location loc = entry.getValue();
-            if (!inventory.contains(objName)) {
+            boolean isHeld = inventory1.contains(objName) || inventory2.contains(objName);
+            if (!isHeld) {
                 addPercept(agName, Literal.parseLiteral("at(" + objName + "," + loc.x + "," + loc.y + ")"));
             }
         }

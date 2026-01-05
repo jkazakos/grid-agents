@@ -14,7 +14,6 @@ import java.util.*;
  ? Returns the cost as an integer number of steps.
  ! If no path exists, returns a very high cost (9999).
  */
-
 public class PathCost extends DefaultInternalAction {
 
     static class Node {
