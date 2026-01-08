@@ -8,34 +8,10 @@ task(open_door, opening,  door,  [key, code]).
 completed(none).
 episode_cost(0).
 ignored_tasks([]).
-tools_available(Tools)
-   :- not (.member(T, Tools) & not holding(T) & not at(T, _, _)).
+tools_available(Tools) :- not (.member(T, Tools) & not holding(T) & not at(T, _, _)).
 
 
 !start.
-
-// --- NEW: SOCIAL NUDGE PROTOCOL ---
-// If another agent asks me to yield a specific spot, and I am there, I move.
-+!yield_for_me(Tx, Ty)[source(Ag)]
-   : pos(MyX, MyY) & MyX == Tx & MyY == Ty
-   <- .print("Agent ", Ag, " needs my spot (", Tx, ",", Ty, "). Moving aside...");
-      !attempt_random_step.
-
-// Catch-all: If I'm not at that spot, I ignore the request.
-+!yield_for_me(_, _).
-
-// --- NEW: PROXIMITY NUDGE ---
-// If someone is stuck near me (Distance <= 1), I must move.
-+!nudge(Ox, Oy)[source(Ag)]
-   : pos(MyX, MyY) & 
-     actions.PathCost(MyX, MyY, Ox, Oy, Dist) & 
-     Dist <= 1 
-   <- .print("Agent ", Ag, " is stuck next to me. Scrambling...");
-      !attempt_random_step.
-
-// Catch-all: If I am far away, I ignore it.
-+!nudge(_, _).
-// ----------------------------------
 
 +episode(Ep) : Ep > 10
    <- .print(">>> MAX RUNS REACHED (", Ep-1, "). Stopping agent. <<<").
@@ -218,9 +194,8 @@ tools_available(Tools)
 
 +!execute_task(ID)
    : task(ID, Type, Target, Tools)
-   <- 
-      .print(">>> EXECUTING TASK: ", ID);
-      
+   <- .print(">>> EXECUTING TASK: ", ID);
+      .broadcast(tell, doing(ID));
       // Manage inventory
       !prepare_inventory(Tools);
       // Go to target
@@ -232,6 +207,19 @@ tools_available(Tools)
       +completed(ID);
       .broadcast(tell, task_completed(ID));  // Broadcast to other agents
       .print("Task ", ID, " completed.").
+
+// Failure handler for execution
+-!execute_task(ID)
+   <- .print("FAILED to execute ", ID, ". Re-evaluating...");
+      // Add it to ignored list so we don't retry immediately
+      ?ignored_tasks(L);
+      .concat(L, [ID], NewL); // Ignore this specific Task ID for now
+      -+ignored_tasks(NewL);
+      !decide_next_action.
+
++doing(ID)[source(Ag)] 
+   <- +completed(ID); // Treat 'doing' as effectively 'completed' for planning purposes
+      .print("Learned ", Ag, " is doing ", ID).
 
 //? === INVENTORY & TOOL MANAGER === */
 
@@ -263,16 +251,40 @@ tools_available(Tools)
       .print("Picked up: ", Tool);
       !acquire_missing(Rest).
 
+// Safety check: Tool not found in environment
++!acquire_missing([Tool|Rest])
+   : not at(Tool, _, _) 
+   <- .print("CRITICAL: I need ", Tool, " but I don't see it! Aborting task.");
+      .fail.
+
 //? === HELPERS === */
 
 +!perform_action(painting, Obj) <- paint(Obj).
 +!perform_action(opening, Obj)  <- open_door.
 
+// NEW MOVEMENT LOGIC WITH RESERVATIONS
 +!go_to(X, Y) : pos(X, Y).
 +!go_to(Tx, Ty) : pos(Sx, Sy) 
-   <- -+target_destination(Tx, Ty);
-      actions.PathTo(Sx, Sy, Tx, Ty, PathList);
-      !move_path(PathList).
+   <- actions.PathTo(Sx, Sy, Tx, Ty, PathList);
+      .findall(T, holding(T), Tools);
+      .length(Tools, NumTools);
+      if (NumTools == 0) {
+         Weight = 1;
+      } else {
+         Weight = 2 * NumTools;
+      }
+      actions.ReservePath(PathList, Weight, ResResult);
+      !handle_move_attempt(ResResult, PathList, Tx, Ty).
+
+// Case: Reservation Successful
++!handle_move_attempt(true, PathList, Tx, Ty)
+   <- !move_path(PathList).
+
+// Case: Reservation Failed (Blocked or Outweighed)
++!handle_move_attempt(false, _, Tx, Ty)
+   <- .print("Path reservation FAILED (Blocked/Lower Priority). Waiting...");
+      .wait(1000); 
+      !go_to(Tx, Ty). // Retry calculation and reservation
 
 // FAILURE HANDLER: If PathTo fails (returns false) or move_path fails unrecoverably
 -!go_to(Tx, Ty)
@@ -287,49 +299,8 @@ tools_available(Tools)
 
 // FAILURE HANDLER: Collision detected during execution
 -!move_path(Path)
-   <- .print("Movement blocked! Initiating collision protocol...");
-      .drop_intention(go_to(_, _));
-
-      // IDENTIFY CONTEXT
-      ?target_destination(Tx, Ty);
-      ?pos(MyX, MyY);
-      .my_name(Me);
-      if (Me == agent1) { Other = agent2; } else { Other = agent1; }
-
-      // SOCIAL NUDGE
-      .print("Nudging ", Other, " to clear (", Tx, ",", Ty, ") OR my vicinity (", MyX, ",", MyY, ")");
-      // Request 1: "Move if you are at my target" (The old check)
-      .send(Other, achieve, yield_for_me(Tx, Ty));
-      // Request 2: "Move if you are right next to me" (THE FIX)
-      .send(Other, achieve, nudge(MyX, MyY));
-
-      // SYMMETRY BREAKING WAIT
-      .random(R);
-      if (Me == agent1) { Offset = 0; } else { Offset = 500; }
-      WaitTime = 500 + (R * 1000) + Offset;
-      .print("Waiting for ", WaitTime, "ms to break symmetry...");
-      .wait(WaitTime);
-      
-      // RETRY
-      !go_to(Tx, Ty).
-
-
-// Try to move in a random direction to unstuck
-+!attempt_random_step
-   <- .random(R);
-      if (R < 0.25) { !try_step(up); }
-      elif (R < 0.5) { !try_step(down); }
-      elif (R < 0.75) { !try_step(left); }
-      else { !try_step(right); }.
-
-// Safe move attempt
-+!try_step(Dir)
-   <- move(Dir).
-
-//If the step-aside hits a wall, wait
--!try_step(Dir)
-   <- .print("Could not step ", Dir, " (Wall/Obstacle). Waiting for other agent to pass...");
-      .wait(3000).
+   <- .print("Movement interrupted! (Reservation likely revoked). Re-planning...");
+      .fail.
 
 +!finish_episode
    <- ?episode_cost(C);

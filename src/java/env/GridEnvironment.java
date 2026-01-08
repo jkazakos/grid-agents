@@ -6,6 +6,7 @@ import jason.environment.grid.GridWorldModel;
 import jason.environment.grid.GridWorldView;
 import jason.environment.grid.Location;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.awt.Color;
 import java.awt.Graphics;
 
@@ -17,6 +18,21 @@ public class GridEnvironment extends Environment {
 
     public static GridEnvironment getInstance() {
         return instance;
+    }
+
+    // Reservation System ---
+    private Map<Location, Reservation> reservationTable = new ConcurrentHashMap<>();
+
+    static class Reservation {
+        String agentName;
+        int priority;
+        long timestamp; 
+
+        public Reservation(String agentName, int priority) {
+            this.agentName = agentName;
+            this.priority = priority;
+            this.timestamp = System.currentTimeMillis();
+        }
     }
 
     public static final int OBSTACLE = 8;
@@ -97,12 +113,74 @@ public class GridEnvironment extends Environment {
         System.out.println("Environment initialized.");
     }
 
+    public Location getAgPos(String agName) {
+        int agId = (agName.equals("agent1")) ? 0 : 1;
+        return model.getAgPos(agId);
+    }
+
+    public synchronized boolean reservePath(String agName, int priority, List<Location> path) {
+        // 1. Validation Phase
+        for (Location loc : path) {
+            // Check Static Obstacles
+            if (!model.inGrid(loc) || model.hasObject(OBSTACLE, loc)) return false;
+
+            // Check if another agent is PHYSICALLY there (cannot reserve occupied space)
+            // (Unless it's the agent itself, obviously)
+            for(int i=0; i<nbAgs; i++) {
+                Location otherPos = model.getAgPos(i);
+                String otherName = (i==0) ? "agent1" : "agent2";
+                if(otherPos.equals(loc) && !otherName.equals(agName)) {
+                     // Path blocked by physical agent
+                     return false; 
+                }
+            }
+
+            // Check Reservations
+            if (reservationTable.containsKey(loc)) {
+                Reservation res = reservationTable.get(loc);
+                if (res.agentName.equals(agName)) continue; // I already own it, extend/keep
+
+                // Conflict detected!
+                if (priority > res.priority) {
+                    // I am heavier. I will OVERWRITE this reservation in the next phase.
+                    // This is the "Bully" logic.
+                    continue; 
+                } else {
+                    // I am lighter or equal. I must yield.
+                    return false;
+                }
+            }
+        }
+
+        // 2. Booking Phase (Commit)
+        // Clear previous reservations for this agent to avoid clutter? 
+        // No, we might want to keep the current tile reserved. 
+        // Ideally, we clear old path reservations not in the new path, but for simplicity:
+        // We just overwrite the path.
+        
+        for (Location loc : path) {
+            reservationTable.put(loc, new Reservation(agName, priority));
+        }
+        
+        return true;
+    }
+
+    // Clears reservations for a specific tile (used after moving out of it)
+    private void clearReservation(Location loc, String agName) {
+        if (reservationTable.containsKey(loc)) {
+            if (reservationTable.get(loc).agentName.equals(agName)) {
+                reservationTable.remove(loc);
+            }
+        }
+    }
+
     private void startNewEpisode() {
         System.out.println("--- STARTING EPISODE " + (currentEpisode) + " ---");
 
         inventory1.clear();
         inventory2.clear();
         goalsDone.clear();
+        reservationTable.clear(); // Clear all locks
 
         agentPos1 = new Location(0, 4);
         agentPos2 = new Location(2, 2);
@@ -119,12 +197,8 @@ public class GridEnvironment extends Environment {
     }
 
     private void triggerNextEpisode(String agName) {
-        System.out.println(
-            "SUCCESS! Agent completed Episode " + currentEpisode
-        );
-
+        System.out.println("SUCCESS! Agent completed Episode " + currentEpisode);
         currentEpisode++;
-
         if (currentEpisode <= MAX_EPISODES) {
             // try { Thread.sleep(500); } catch (Exception e) {}
             startNewEpisode();
@@ -377,7 +451,6 @@ public class GridEnvironment extends Environment {
         informAgsEnvironmentChanged();
 
         if (result && goalsDone.size() >= 3) {
-            // Wait a tiny bit so the logs print nicely, then reset
             try { Thread.sleep(1000); } catch (Exception e) {}
             triggerNextEpisode(agName);
         }
@@ -387,10 +460,7 @@ public class GridEnvironment extends Environment {
 
     private boolean move(String agName, String direction) {
         // Identify which agent is moving
-        int agId = -1;
-        if (agName.equals("agent1")) agId = 0;
-        else if (agName.equals("agent2")) agId = 1;
-
+        int agId = (agName.equals("agent1")) ? 0 : 1;
         // Determine current position
         Location currentPos = model.getAgPos(agId);
         Location newPos = (Location) currentPos.clone();
@@ -414,9 +484,22 @@ public class GridEnvironment extends Environment {
             }
         }
 
+        // --- NEW: Reservation Check ---
+        // You can only move if you hold the reservation OR if the tile is free and unreserved.
+        // But strictly enforcing: You MUST reserve before moving.
+        if (reservationTable.containsKey(newPos)) {
+            Reservation res = reservationTable.get(newPos);
+            if (!res.agentName.equals(agName)) {
+                System.out.println("MOVE BLOCKED: " + agName + " tried to enter " + newPos.x+","+newPos.y + " reserved by " + res.agentName);
+                return false; 
+            }
+        }
+
         try {
+            // Free the old tile reservation
+            clearReservation(currentPos, agName);
+            
             model.setAgPos(agId, newPos);
-            // Update the local variables
             if (agId == 0) agentPos1 = newPos;
             if (agId == 1) agentPos2 = newPos;
         } catch (Exception e) {
