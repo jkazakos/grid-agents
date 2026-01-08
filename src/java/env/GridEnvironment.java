@@ -13,6 +13,11 @@ import java.awt.Graphics;
 public class GridEnvironment extends Environment {
 
     private static int W = 5, H = 5, nbAgs = 2;
+    private static GridEnvironment instance = null;
+
+    public static GridEnvironment getInstance() {
+        return instance;
+    }
 
     public static final int OBSTACLE = 8;
     public static final int DOOR = 16;
@@ -46,6 +51,11 @@ public class GridEnvironment extends Environment {
         return H;
     }
 
+    public boolean isFree(int x, int y) {
+        if (model == null) return false;
+        return model.isFree(new Location(x, y));
+    }
+
     public static void addEpisodeScore(double score) {
         totalScore += score;
         episodeCount++;
@@ -64,6 +74,7 @@ public class GridEnvironment extends Environment {
 
     @Override
     public void init(String[] args) {
+        instance = this;
         model = new MyModel();
         new MyView(model);
 

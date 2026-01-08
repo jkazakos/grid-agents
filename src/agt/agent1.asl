@@ -8,12 +8,34 @@ task(open_door, opening,  door,  [key, code]).
 completed(none).
 episode_cost(0).
 ignored_tasks([]).
-
 tools_available(Tools)
    :- not (.member(T, Tools) & not holding(T) & not at(T, _, _)).
 
 
 !start.
+
+// --- NEW: SOCIAL NUDGE PROTOCOL ---
+// If another agent asks me to yield a specific spot, and I am there, I move.
++!yield_for_me(Tx, Ty)[source(Ag)]
+   : pos(MyX, MyY) & MyX == Tx & MyY == Ty
+   <- .print("Agent ", Ag, " needs my spot (", Tx, ",", Ty, "). Moving aside...");
+      !attempt_random_step.
+
+// Catch-all: If I'm not at that spot, I ignore the request.
++!yield_for_me(_, _).
+
+// --- NEW: PROXIMITY NUDGE ---
+// If someone is stuck near me (Distance <= 1), I must move.
++!nudge(Ox, Oy)[source(Ag)]
+   : pos(MyX, MyY) & 
+     actions.PathCost(MyX, MyY, Ox, Oy, Dist) & 
+     Dist <= 1 
+   <- .print("Agent ", Ag, " is stuck next to me. Scrambling...");
+      !attempt_random_step.
+
+// Catch-all: If I am far away, I ignore it.
++!nudge(_, _).
+// ----------------------------------
 
 +episode(Ep) : Ep > 10
    <- .print(">>> MAX RUNS REACHED (", Ep-1, "). Stopping agent. <<<").
@@ -107,8 +129,7 @@ tools_available(Tools)
 //? OUTCOME HANDLERS
 // I WON: Add Cost & Execute
 +!handle_outcome(win, TaskID, Cost)
-   <- 
-      .print("Negotiation WON for ", TaskID);
+   <- .print("Negotiation WON for ", TaskID);
       ?task(TaskID, _, _, RequiredTools);
       ?ignored_tasks(List);
       .concat(List, [RequiredTools], NewList);
@@ -118,13 +139,11 @@ tools_available(Tools)
 
 // I LOST: Ignore Task & Retry
 +!handle_outcome(lose, TaskID, Cost)
-   <- 
-      .print("Negotiation LOST for ", TaskID, ". Ignoring it temporarily.");
+   <- .print("Negotiation LOST for ", TaskID, ". Ignoring it temporarily.");
       ?task(TaskID, _, _, RequiredTools);
       ?ignored_tasks(List);
       .concat(List, [RequiredTools], NewList);
       -+ignored_tasks(NewList);
-      
       // Loop back immediately to find the NEXT best task
       !decide_next_action.
 
@@ -135,8 +154,7 @@ tools_available(Tools)
 
 // Evaluate options recursively
 +!evaluate_options([id(ID, Type, Target, Tools)|Rest], BestID, MinCost)
-   <- 
-      // Calculate cost for current task
+   <- // Calculate cost for current task
       !calculate_task_cost(Target, Tools, CurrentCost);
       // Print cost for debugging
       .print("Evaluated task ", ID, " with cost ", CurrentCost);
@@ -148,8 +166,7 @@ tools_available(Tools)
 // Calculate cost for a single task
 +!calculate_task_cost(Target, RequiredTools, FinalCost)
    : pos(Ax, Ay) & at(Target, Tx, Ty)
-   <- 
-      // Find what tools are missing
+   <- // Find what tools are missing
       .findall(T, (.member(T, RequiredTools) & not holding(T)), MissingTools);
       .length(MissingTools, MissingCount);
       // Call specific case
@@ -157,15 +174,13 @@ tools_available(Tools)
 
 // CASE 1: HAVE EVERYTHING (MissingCount = 0)
 +!calc_specific_case(0, [], Ax, Ay, Tx, Ty, FinalCost)
-   <- 
-      // Agent -> Target
+   <- // Agent -> Target
       actions.PathCost(Ax, Ay, Tx, Ty, Steps);
       FinalCost = Steps * 4.
 
 // CASE 2: MISSING 1 TOOL (MissingCount = 1)
 +!calc_specific_case(1, [Tool], Ax, Ay, Tx, Ty, FinalCost)
-   <- 
-      ?at(Tool, ToolX, ToolY);
+   <- ?at(Tool, ToolX, ToolY);
       // Leg 1: Agent -> Tool
       actions.PathCost(Ax, Ay, ToolX, ToolY, Dist1);
       Cost1 = Dist1 * 2;
@@ -178,8 +193,7 @@ tools_available(Tools)
 
 // CASE 3: MISSING 2 TOOLS (MissingCount = 2)
 +!calc_specific_case(2, [T1, T2], Ax, Ay, Tx, Ty, FinalCost)
-   <- 
-      // Sequence A: T1 -> T2 -> Target
+   <- // Sequence A: T1 -> T2 -> Target
       !calc_trip_sequence(T1, T2, Ax, Ay, Tx, Ty, CostA);
       // Sequence B: T2 -> T1 -> Target
       !calc_trip_sequence(T2, T1, Ax, Ay, Tx, Ty, CostB);
@@ -187,8 +201,7 @@ tools_available(Tools)
 
 // Helper for Case 3
 +!calc_trip_sequence(First, Second, Ax, Ay, Tx, Ty, TotalCost)
-   <- 
-      ?at(First, Fx, Fy);
+   <- ?at(First, Fx, Fy);
       ?at(Second, Sx, Sy);
       // Leg 1: Agent -> First Tool
       actions.PathCost(Ax, Ay, Fx, Fy, D1);
@@ -261,31 +274,65 @@ tools_available(Tools)
       actions.PathTo(Sx, Sy, Tx, Ty, PathList);
       !move_path(PathList).
 
+// FAILURE HANDLER: If PathTo fails (returns false) or move_path fails unrecoverably
+-!go_to(Tx, Ty)
+   <- .print("Path calculation failed (target unreachable?). Waiting...");
+      .wait(1000);
+      !go_to(Tx, Ty).
+
 +!move_path([]).
 +!move_path([M|Rest])
    <- move(M);
       !move_path(Rest).
 
-// FAILURE HANDLER: If move(M) fails (returns false)
+// FAILURE HANDLER: Collision detected during execution
 -!move_path(Path)
-   <- .print("Movement blocked! Waiting for path to clear...");
-      .random(R);
-      WaitTime = 200 + (R * 800);
-      .wait(WaitTime);
-      ?pos(X, Y);
-      // Move to a random spot to get unstuck
-      .random(DirRand);
-      if (DirRand < 0.25) { move(up); }
-      elif (DirRand < 0.5) { move(down); }
-      elif (DirRand < 0.75) { move(left); }
-      else { move(right); }
-      // Retry going to the target
+   <- .print("Movement blocked! Initiating collision protocol...");
+      .drop_intention(go_to(_, _));
+
+      // IDENTIFY CONTEXT
       ?target_destination(Tx, Ty);
+      ?pos(MyX, MyY);
+      .my_name(Me);
+      if (Me == agent1) { Other = agent2; } else { Other = agent1; }
+
+      // SOCIAL NUDGE
+      .print("Nudging ", Other, " to clear (", Tx, ",", Ty, ") OR my vicinity (", MyX, ",", MyY, ")");
+      // Request 1: "Move if you are at my target" (The old check)
+      .send(Other, achieve, yield_for_me(Tx, Ty));
+      // Request 2: "Move if you are right next to me" (THE FIX)
+      .send(Other, achieve, nudge(MyX, MyY));
+
+      // SYMMETRY BREAKING WAIT
+      .random(R);
+      if (Me == agent1) { Offset = 0; } else { Offset = 500; }
+      WaitTime = 500 + (R * 1000) + Offset;
+      .print("Waiting for ", WaitTime, "ms to break symmetry...");
+      .wait(WaitTime);
+      
+      // RETRY
       !go_to(Tx, Ty).
 
+
+// Try to move in a random direction to unstuck
++!attempt_random_step
+   <- .random(R);
+      if (R < 0.25) { !try_step(up); }
+      elif (R < 0.5) { !try_step(down); }
+      elif (R < 0.75) { !try_step(left); }
+      else { !try_step(right); }.
+
+// Safe move attempt
++!try_step(Dir)
+   <- move(Dir).
+
+//If the step-aside hits a wall, wait
+-!try_step(Dir)
+   <- .print("Could not step ", Dir, " (Wall/Obstacle). Waiting for other agent to pass...");
+      .wait(3000).
+
 +!finish_episode
-   <- 
-      ?episode_cost(C);
+   <- ?episode_cost(C);
       actions.CalculateEpisodeScore(C, Score);
       .print("EPISODE FINISHED");
       .print("Episode Score: ", Score);
@@ -297,6 +344,6 @@ tools_available(Tools)
 +!compare_and_select(ID1, C1, ID2, C2, ID2, C2) : C2 < C1.
 
 // Listen for completion
-+task_completed(ID)
++task_completed(ID)[source(Ag)]
    <- +completed(ID);
       .print("Learned from ", Ag, " that task ", ID, " is done.").
