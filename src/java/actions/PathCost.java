@@ -32,16 +32,21 @@ public class PathCost extends DefaultInternalAction {
 
     @Override
     public Object execute(TransitionSystem ts, Unifier un, Term[] args) throws Exception {
-        int x1 = (int) Math.round(((NumberTerm) args[0]).solve());
-        int y1 = (int) Math.round(((NumberTerm) args[1]).solve());
-        int x2 = (int) Math.round(((NumberTerm) args[2]).solve());
-        int y2 = (int) Math.round(((NumberTerm) args[3]).solve());
+        try {
+            int x1 = (int) Math.round(((NumberTerm) args[0]).solve());
+            int y1 = (int) Math.round(((NumberTerm) args[1]).solve());
+            int x2 = (int) Math.round(((NumberTerm) args[2]).solve());
+            int y2 = (int) Math.round(((NumberTerm) args[3]).solve());
 
-        Integer cost = aStarCost(x1, y1, x2, y2);
-        if (cost == null) {
-            return un.unifies(args[4], new NumberTermImpl(9999)); // ! Very high cost for no path => Don't choose this
+            Integer cost = aStarCost(x1, y1, x2, y2);
+            if (cost == null) {
+                return un.unifies(args[4], new NumberTermImpl(9999)); // ! Very high cost for no path => Don't choose this
+            }
+            return un.unifies(args[4], new NumberTermImpl(cost));
+        } catch (Exception e) {
+            System.out.println("PathCost Error: " + e.getMessage());
+            return un.unifies(args[4], new NumberTermImpl(9999));
         }
-        return un.unifies(args[4], new NumberTermImpl(cost));
     }
 
     private Integer aStarCost(int sx, int sy, int tx, int ty) {

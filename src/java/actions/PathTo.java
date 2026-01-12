@@ -56,9 +56,9 @@ public class PathTo extends DefaultInternalAction {
             return un.unifies(args[4], list);
         } catch (Exception e) {
             e.printStackTrace();
+            System.out.println("PathTo Error: " + e.getMessage());
+            return false;
         }
-        System.out.println("PathTo: error in path calculation.");
-        return false;
     }
 
     private List<String> aStarPath(GridEnvironment env, int sx, int sy, int tx, int ty) {
