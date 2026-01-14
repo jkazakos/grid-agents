@@ -55,19 +55,13 @@ tools_available(Tools) :- not (.member(T, Tools) & not holding(T) & not at(T, _,
 
 // No options available
 +!select_best_option([])
-   <- .print("No valid tasks available right now. Returning home...");
+   <- .print("No valid tasks available right now. Waiting...");
       -+busy(false);
       // Drop all tools so we don't block with phantom priority
       .findall(Item, holding(Item), HeldItems);
       for (.member(I, HeldItems)) {
           .print("Dropping ", I);
           drop(I);
-      }
-      // Return to home position to clear important areas
-      ?home(Hx, Hy);
-      ?pos(Cx, Cy);
-      if (Cx \== Hx | Cy \== Hy) {
-          !go_to(Hx, Hy);
       }
       .wait(500);
       -+ignored_tasks([]); // Clear list and try again
