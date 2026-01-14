@@ -8,6 +8,7 @@ task(open_door, opening,  door,  [key, code]).
 completed(none).
 episode_cost(0).
 ignored_tasks([]).
+busy(false).
 tools_available(Tools) :- not (.member(T, Tools) & not holding(T) & not at(T, _, _)).
 
 
@@ -26,8 +27,10 @@ tools_available(Tools) :- not (.member(T, Tools) & not holding(T) & not at(T, _,
       .abolish(doing(_));
       .abolish(task_completed(_));
       .abolish(task_dropped(_));
+      .abolish(busy(_));
       -+episode_cost(0);
       +ignored_tasks([]);
+      +busy(false);
       !start.
 
 //? MAIN CONTROL LOOP
@@ -52,8 +55,21 @@ tools_available(Tools) :- not (.member(T, Tools) & not holding(T) & not at(T, _,
 
 // No options available
 +!select_best_option([])
-   <- .print("No valid tasks available right now. Waiting...");
-      .wait(1000); // Wait for the other agent
+   <- .print("No valid tasks available right now. Returning home...");
+      -+busy(false);
+      // Drop all tools so we don't block with phantom priority
+      .findall(Item, holding(Item), HeldItems);
+      for (.member(I, HeldItems)) {
+          .print("Dropping ", I);
+          drop(I);
+      }
+      // Return to home position to clear important areas
+      ?home(Hx, Hy);
+      ?pos(Cx, Cy);
+      if (Cx \== Hx | Cy \== Hy) {
+          !go_to(Hx, Hy);
+      }
+      .wait(500);
       -+ignored_tasks([]); // Clear list and try again
       !decide_next_action.
 
@@ -201,7 +217,8 @@ tools_available(Tools) :- not (.member(T, Tools) & not holding(T) & not at(T, _,
 
 +!execute_task(ID)
    : task(ID, Type, Target, Tools)
-   <- .print(">>> EXECUTING TASK: ", ID);
+   <- -+busy(true);
+      .print(">>> EXECUTING TASK: ", ID);
       .broadcast(tell, doing(ID));
 
       // DEBUG: Dump Beliefs about Target/Tools
@@ -467,9 +484,13 @@ tools_available(Tools) :- not (.member(T, Tools) & not holding(T) & not at(T, _,
       }.
 
 +!calculate_priority_minimal(P)
-   <- .count(holding(_), Tools);
-      // Without a specific target (since we are yielding), we assume 0 distance advantage
-      P = (Tools * 10).
+   <- if (busy(true)) {
+          .count(holding(_), Tools);
+          P = (Tools * 10);
+      } else {
+          // Idle agents have priority 0, so they always yield
+          P = 0;
+      }.
 
 // FAILURE HANDLERS
 -!go_to_step(Tx, Ty, _)
