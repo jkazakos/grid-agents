@@ -22,6 +22,10 @@ tools_available(Tools) :- not (.member(T, Tools) & not holding(T) & not at(T, _,
       .abolish(holding(_));
       .abolish(completed(_));
       .abolish(ignored_tasks(_));
+      .abolish(propose(_, _));
+      .abolish(doing(_));
+      .abolish(task_completed(_));
+      .abolish(task_dropped(_));
       -+episode_cost(0);
       +ignored_tasks([]);
       !start.
@@ -66,7 +70,7 @@ tools_available(Tools) :- not (.member(T, Tools) & not holding(T) & not at(T, _,
       !compare_utilities(MyTask, MyCost, OtherTask, OtherCost, Opponent). // We pass MyCost to the comparison so we can use it if we win
 
 +!wait_for_opponent(MyTask, MyCost, OT, OC, Ag)
-   <- .wait(propose(OT, OC), 1000, _);
+   <- .wait(propose(OT, OC), 2000, _);
       if (.ground(OT)) {
          .print("Opponent wants: ", OT);
       } else {
@@ -100,15 +104,14 @@ tools_available(Tools) :- not (.member(T, Tools) & not holding(T) & not at(T, _,
                 !handle_outcome(lose, MyTask, MyCost);
              }
           }
-      }.
+      };
+      .abolish(propose(_, _)).
 
 //? OUTCOME HANDLERS
 // I WON: Add Cost & Execute
 +!handle_outcome(win, TaskID, Cost)
    <- .print("Negotiation WON for ", TaskID);
       ?task(TaskID, _, _, RequiredTools);
-      ?ignored_tasks(List);
-      .concat(List, [RequiredTools], NewList);
       -+ignored_tasks([]);
       !execute_task(TaskID);
       !decide_next_action.
@@ -193,15 +196,44 @@ tools_available(Tools) :- not (.member(T, Tools) & not holding(T) & not at(T, _,
 //? === EXECUTION LOGIC === */
 
 +!execute_task(ID)
+   : completed(ID)
+   <- .print("Task ", ID, " is already handled by the other agent. Skipping.").
+
++!execute_task(ID)
    : task(ID, Type, Target, Tools)
    <- .print(">>> EXECUTING TASK: ", ID);
       .broadcast(tell, doing(ID));
-      // Manage inventory
-      !prepare_inventory(Tools);
-      // Go to target
+
+      // DEBUG: Dump Beliefs about Target/Tools
       ?at(Target, Tx, Ty);
+      .print("DEBUG: Belief Target ", Target, " is at ", Tx, ",", Ty);
+      for ( .member(T, Tools) ) {
+          if (holding(T)) {
+              .print("DEBUG: Belief Tool ", T, " is held.");
+          } else {
+              if (at(T, ToolX, ToolY)) {
+                  .print("DEBUG: Belief Tool ", T, " is at ", ToolX, ",", ToolY);
+              } else {
+                  .print("DEBUG: Belief Tool ", T, " location is UNKNOWN.");
+              }
+          }
+      }
+      // Manage inventory
+      .print("DEBUG: Preparing inventory for ", ID);
+      !prepare_inventory(Tools, Target);
+      .print("DEBUG: Inventory prepared. Going to target ", Target);
+      // Go to target
       !go_to(Tx, Ty);
+      
+      // Verification: Ensure I am still at target (might have yielded)
+      ?pos(CX, CY);
+      if (CX \== Tx | CY \== Ty) {
+          .print("CRITICAL: Moved away from target (at ", CX, ",", CY, ")! Aborting action.");
+          .fail;
+      }
+
       // Do the task
+      .print("DEBUG: At target. Performing action ", Type);
       !perform_action(Type, Target);
       // Update the task as completed
       +completed(ID);
@@ -211,6 +243,7 @@ tools_available(Tools) :- not (.member(T, Tools) & not holding(T) & not at(T, _,
 // Failure handler for execution
 -!execute_task(ID)
    <- .print("FAILED to execute ", ID, ". Re-evaluating...");
+      .broadcast(tell, task_dropped(ID)); // Tell others I gave up
       // Add it to ignored list so we don't retry immediately
       ?ignored_tasks(L);
       .concat(L, [ID], NewL); // Ignore this specific Task ID for now
@@ -221,15 +254,32 @@ tools_available(Tools) :- not (.member(T, Tools) & not holding(T) & not at(T, _,
    <- +completed(ID); // Treat 'doing' as effectively 'completed' for planning purposes
       .print("Learned ", Ag, " is doing ", ID).
 
++task_dropped(ID)[source(Ag)]
+   <- -completed(ID);
+      .print("Learned ", Ag, " dropped task ", ID).
+
 //? === INVENTORY & TOOL MANAGER === */
 
-+!prepare_inventory(RequiredTools)
-   <- 
-      // Drop unneeded items
-      .findall(Item, holding(Item), CurrentItems);
++!prepare_inventory(RequiredTools, Target)
+   <- .findall(Item, holding(Item), CurrentItems);
       !drop_unneeded(CurrentItems, RequiredTools);
-      // Pick up missing tools
-      !acquire_missing(RequiredTools).
+      .findall(T, (.member(T, RequiredTools) & not holding(T)), MissingTools);
+      .length(MissingTools, MCount);
+      .print("DEBUG: Missing tools count: ", MCount, " Tools: ", MissingTools);
+      !acquire_tools_strategy(MCount, MissingTools, Target).
+
+// Strategy A: 2 tools
++!acquire_tools_strategy(2, MissingTools, Target)
+   : pos(Ax, Ay) & at(Target, Tx, Ty)
+   <- .print("DEBUG: Sorting 2 tools for optimal path...");
+      !sort_tools_by_cost(MissingTools, Ax, Ay, Tx, Ty, OrderedTools);
+      .print("DEBUG: Ordered tools: ", OrderedTools);
+      !acquire_missing(OrderedTools).
+
+// Strategy: Default
++!acquire_tools_strategy(_, MissingTools, Target)
+   <- .print("DEBUG: Acquiring tools unsorted...");
+      !acquire_missing(MissingTools).
 
 +!drop_unneeded([], _).
 +!drop_unneeded([Item|Rest], Needed) 
@@ -245,7 +295,9 @@ tools_available(Tools) :- not (.member(T, Tools) & not holding(T) & not at(T, _,
    : holding(Tool)
    <- !acquire_missing(Rest).
 +!acquire_missing([Tool|Rest])
-   <- ?at(Tool, Tx, Ty);
+   <- .print("DEBUG: Acquiring ", Tool);
+      ?at(Tool, Tx, Ty);
+      .print("DEBUG: Tool at ", Tx, ",", Ty);
       !go_to(Tx, Ty);
       pickup(Tool);
       .print("Picked up: ", Tool);
@@ -257,49 +309,171 @@ tools_available(Tools) :- not (.member(T, Tools) & not holding(T) & not at(T, _,
    <- .print("CRITICAL: I need ", Tool, " but I don't see it! Aborting task.");
       .fail.
 
+// Safety Fallback for sorting: If calculation fails, just return original order
++!sort_tools_by_cost(Tools, _, _, _, _, Tools)
+   <- .print("DEBUG: Cost sort failed or equal. Using default order.").
+
++!sort_tools_by_cost([T1, T2], Ax, Ay, Tx, Ty, [T1, T2])
+   <- !calc_trip_sequence(T1, T2, Ax, Ay, Tx, Ty, CostA);
+      !calc_trip_sequence(T2, T1, Ax, Ay, Tx, Ty, CostB);
+      CostA <= CostB.
+
++!sort_tools_by_cost([T1, T2], Ax, Ay, Tx, Ty, [T2, T1]).
+
 //? === HELPERS === */
 
 +!perform_action(painting, Obj) <- paint(Obj).
 +!perform_action(opening, Obj)  <- open_door.
 
-// NEW MOVEMENT LOGIC WITH RESERVATIONS
-+!go_to(X, Y) : pos(X, Y).
-+!go_to(Tx, Ty) : pos(Sx, Sy) 
-   <- actions.PathTo(Sx, Sy, Tx, Ty, PathList);
-      .findall(T, holding(T), Tools);
-      .length(Tools, NumTools);
-      if (NumTools == 0) {
-         Weight = 1;
+//? === NEW STEP-BY-STEP MOVEMENT LOGIC === */
+
++!go_to(X, Y) : pos(X, Y) <- .print("Arrived at ", X, ",", Y).
+
++!go_to(Tx, Ty) 
+   <- !go_to_step(Tx, Ty, 0).
+
++!go_to_step(Tx, Ty, WaitCount) : pos(Tx, Ty) 
+   <- .print("Arrived at target: ", Tx, ",", Ty).
+
++!go_to_step(Tx, Ty, WaitCount) : pos(Cx, Cy)
+   <- .print("Thinking about path from ", Cx, ",", Cy, " to ", Tx, ",", Ty);
+      // Use PathTo as a statement to handle failure via failure handler
+      !do_path_step(Tx, Ty, WaitCount).
+
++!do_path_step(Tx, Ty, WaitCount) : pos(Cx, Cy)
+   <- actions.PathTo(Cx, Cy, Tx, Ty, Path, false);
+      .print("Path list: ", Path);
+      if (.length(Path, L) & L > 0) {
+          .nth(0, Path, Dir);
+          .print("Next direction: ", Dir);
+          !calculate_next_pos(Cx, Cy, Dir, Nx, Ny);
+          .print("Next coordinates: ", Nx, ",", Ny);
+          
+          actions.IsBlocked(Nx, Ny, Blocked);
+          .print("IsBlocked result for ", Nx, ",", Ny, ": ", Blocked);
+          
+          if (not Blocked) {
+              .print("Attempting move ", Dir);
+              move(Dir);
+              !go_to_step(Tx, Ty, 0); // Reset wait count on successful move
+          } else {
+              if (other_agent_at(Nx, Ny)) {
+                  !handle_collision(Nx, Ny, Tx, Ty, WaitCount);
+              } else {
+                  // Static obstacle in the way of next step? 
+                  // This shouldn't happen with PathTo, but if it does, recompute
+                  .wait(200);
+                  !go_to_step(Tx, Ty, WaitCount);
+              }
+          }
       } else {
-         Weight = 2 * NumTools;
-      }
-      actions.ReservePath(PathList, Weight, ResResult);
-      !handle_move_attempt(ResResult, PathList, Tx, Ty).
+          .print("Already at target or empty path.");
+          !go_to_step(Tx, Ty, 0);
+      }.
 
-// Case: Reservation Successful
-+!handle_move_attempt(true, PathList, Tx, Ty)
-   <- !move_path(PathList).
+// FAILURE HANDLER for do_path_step (triggers when PathTo returns false)
+-!do_path_step(Tx, Ty, WaitCount)
+   <- .print("No path found (PathTo failed). Checking if other agent is the cause...");
+      if (other_agent_at(_, _)) {
+         !handle_total_block(Tx, Ty, WaitCount);
+      } else {
+         .print("Unreachable target. Failing execution.");
+         .fail;
+      }.
 
-// Case: Reservation Failed (Blocked or Outweighed)
-+!handle_move_attempt(false, _, Tx, Ty)
-   <- .print("Path reservation FAILED (Blocked/Lower Priority). Waiting...");
-      .wait(1000); 
-      !go_to(Tx, Ty). // Retry calculation and reservation
++!handle_collision(Nx, Ny, Tx, Ty, WaitCount)
+   <- !calculate_priority(Tx, Ty, MyP);
+      .print("Collision at ", Nx, ",", Ny, "! My Priority: ", MyP);
+      .broadcast(tell, yield_request(MyP));
+      
+      if (WaitCount > 5) {
+          .print("Persistent conflict! Trying to path AROUND the other agent...");
+          ?pos(Cx, Cy);
+          // Use a goal for alternate path calculation to handle failure
+          !do_alt_path(Cx, Cy, Tx, Ty);
+      } else {
+          .wait(500);
+          !go_to_step(Tx, Ty, WaitCount + 1);
+      }.
 
-// FAILURE HANDLER: If PathTo fails (returns false) or move_path fails unrecoverably
--!go_to(Tx, Ty)
-   <- .print("Path calculation failed (target unreachable?). Waiting...");
++!do_alt_path(Cx, Cy, Tx, Ty)
+   <- actions.PathTo(Cx, Cy, Tx, Ty, AltPath, true);
+      .print("Found alternate path: ", AltPath);
+      !go_to_step(Tx, Ty, 0).
+
+-!do_alt_path(Cx, Cy, Tx, Ty)
+   <- .print("No alternate path found. Deadlock detected. Moving to a safe tile.");
+      !step_aside;
       .wait(1000);
-      !go_to(Tx, Ty).
+      !go_to_step(Tx, Ty, 0).
 
-+!move_path([]).
-+!move_path([M|Rest])
-   <- move(M);
-      !move_path(Rest).
++!handle_total_block(Tx, Ty, WaitCount)
+   <- !calculate_priority(Tx, Ty, MyP);
+      .broadcast(tell, yield_request(MyP));
+      .print("Path totally blocked by other agent. Priority: ", MyP, " Wait: ", WaitCount);
+      if (WaitCount > 3) {
+          .print("Backing off to allow room...");
+          !step_aside;
+          .wait(1000);
+          !go_to_step(Tx, Ty, 0);
+      } else {
+          .wait(1000);
+          !go_to_step(Tx, Ty, WaitCount + 1);
+      }.
 
-// FAILURE HANDLER: Collision detected during execution
--!move_path(Path)
-   <- .print("Movement interrupted! (Reservation likely revoked). Re-planning...");
++!calculate_priority(Tx, Ty, P)
+   <- .count(holding(_), Tools);
+      ?pos(Cx, Cy);
+      Dist = math.abs(Tx - Cx) + math.abs(Ty - Cy);
+      P = (Tools * 10) + (10 - Dist).
+
++!calculate_next_pos(X, Y, up, X, NY) <- NY = Y - 1; +temp_next(X, Y, up, X, NY).
++!calculate_next_pos(X, Y, down, X, NY) <- NY = Y + 1; +temp_next(X, Y, down, X, NY).
++!calculate_next_pos(X, Y, left, NX, Y) <- NX = X - 1; +temp_next(X, Y, left, NX, Y).
++!calculate_next_pos(X, Y, right, NX, Y) <- NX = X + 1; +temp_next(X, Y, right, NX, Y).
+
++!step_aside
+   <- ?pos(Cx, Cy);
+      .abolish(temp_next(_, _, _, _, _));
+      !calculate_next_pos(Cx, Cy, up, _, _);
+      !calculate_next_pos(Cx, Cy, down, _, _);
+      !calculate_next_pos(Cx, Cy, left, _, _);
+      !calculate_next_pos(Cx, Cy, right, _, _);
+      // Simple escape: move to a neighbor that isn't where the other agent is and isn't a wall
+      .findall(loc(Nx, Ny, D), (temp_next(Cx, Cy, D, Nx, Ny) & not actions.IsBlocked(Nx, Ny, true)), Safes);
+      if (.length(Safes, L) & L > 0) {
+          .nth(0, Safes, loc(Sx, Sy, Dir));
+          .print("Stepping aside to ", Sx, ",", Sy);
+          move(Dir);
+      } else {
+          .print("No room to step aside!");
+      }.
+
+// ? YIELD LOGIC
+
++yield_request(ReqP)[source(Ag)]
+   <- ?pos(Cx, Cy);
+      ?other_agent_at(Ox, Oy); // This is me from their perspective if we aren't updated?
+      // Wait, other_agent_at in my percepts is the OTHER agent.
+      // I am at Cx, Cy.
+      // I only yield if ReqP > MyP OR if we are tied and Ag is agent1 (arbitrary tie-break)
+      !calculate_priority_minimal(MyP);
+      .my_name(Me);
+      if (ReqP > MyP | (ReqP == MyP & Ag == agent1 & Me == agent2)) {
+          .print("Yielding to ", Ag, " (", ReqP, " > ", MyP, ")");
+          !step_aside;
+      } else {
+          .print("Not yielding to ", Ag, " (", ReqP, " <= ", MyP, ")");
+      }.
+
++!calculate_priority_minimal(P)
+   <- .count(holding(_), Tools);
+      // Without a specific target (since we are yielding), we assume 0 distance advantage
+      P = (Tools * 10).
+
+// FAILURE HANDLERS
+-!go_to_step(Tx, Ty, _)
+   <- .print("Critical Movement Error. Aborting step.");
       .fail.
 
 +!finish_episode
@@ -318,3 +492,4 @@ tools_available(Tools) :- not (.member(T, Tools) & not holding(T) & not at(T, _,
 +task_completed(ID)[source(Ag)]
    <- +completed(ID);
       .print("Learned from ", Ag, " that task ", ID, " is done.").
+

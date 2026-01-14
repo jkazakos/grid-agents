@@ -32,15 +32,20 @@ public class PathTo extends DefaultInternalAction {
             int x2 = (int) Math.round(((NumberTerm) args[2]).solve());
             int y2 = (int) Math.round(((NumberTerm) args[3]).solve());
 
+            boolean avoidAgent = false;
+            if (args.length > 5) {
+                avoidAgent = ((Atom) args[5]).getFunctor().equals("true");
+            }
+
             GridEnvironment env = GridEnvironment.getInstance();
             if (env == null) {
                 System.out.println("PathTo Error: Environment not initialized yet.");
                 return false;
             }
 
-            System.out.println("PathTo: calculating path from (" + x1 + "," + y1 + ") to (" + x2 + "," + y2 + ")");
+            System.out.println("PathTo: calculating path from (" + x1 + "," + y1 + ") to (" + x2 + "," + y2 + ") (avoidAgent: " + avoidAgent + ")");
             
-            List<String> steps = aStarPath(env, x1, y1, x2, y2);
+            List<String> steps = aStarPath(env, x1, y1, x2, y2, avoidAgent, ts.getAgArch().getAgName());
             if (steps == null) {
                 System.out.println("PathTo: no path found.");
                 return false;
@@ -61,7 +66,7 @@ public class PathTo extends DefaultInternalAction {
         }
     }
 
-    private List<String> aStarPath(GridEnvironment env, int sx, int sy, int tx, int ty) {
+    private List<String> aStarPath(GridEnvironment env, int sx, int sy, int tx, int ty, boolean avoidAgent, String myName) {
         if (sx == tx && sy == ty) {
             return new ArrayList<>();
         }
@@ -73,6 +78,9 @@ public class PathTo extends DefaultInternalAction {
 
         int W = GridEnvironment.getWidth();
         int H = GridEnvironment.getHeight();
+
+        String otherName = myName.equals("agent1") ? "agent2" : "agent1";
+        jason.environment.grid.Location otherPos = env.getAgPos(otherName);
 
         PriorityQueue<Node> open = new PriorityQueue<>(Comparator.comparingInt(n -> n.f));
         boolean[][] closed = new boolean[W][H];
@@ -97,6 +105,8 @@ public class PathTo extends DefaultInternalAction {
                 if (nx < 0 || ny < 0 || nx >= W || ny >= H) continue;
 
                 if (GridEnvironment.isBlocked(nx, ny)) continue;
+
+                if (avoidAgent && otherPos != null && otherPos.x == nx && otherPos.y == ny) continue;
 
                 if (closed[nx][ny]) continue;
 

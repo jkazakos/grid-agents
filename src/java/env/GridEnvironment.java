@@ -6,7 +6,6 @@ import jason.environment.grid.GridWorldModel;
 import jason.environment.grid.GridWorldView;
 import jason.environment.grid.Location;
 import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
 import java.awt.Color;
 import java.awt.Graphics;
 
@@ -20,20 +19,6 @@ public class GridEnvironment extends Environment {
         return instance;
     }
 
-    // Reservation System ---
-    private Map<Location, Reservation> reservationTable = new ConcurrentHashMap<>();
-
-    static class Reservation {
-        String agentName;
-        int priority;
-        long timestamp; 
-
-        public Reservation(String agentName, int priority) {
-            this.agentName = agentName;
-            this.priority = priority;
-            this.timestamp = System.currentTimeMillis();
-        }
-    }
 
     public static final int OBSTACLE = 8;
     public static final int DOOR = 16;
@@ -118,61 +103,6 @@ public class GridEnvironment extends Environment {
         return model.getAgPos(agId);
     }
 
-    public synchronized boolean reservePath(String agName, int priority, List<Location> path) {
-        // 1. Validation Phase
-        for (Location loc : path) {
-            // Check Static Obstacles
-            if (!model.inGrid(loc) || model.hasObject(OBSTACLE, loc)) return false;
-
-            // Check if another agent is PHYSICALLY there (cannot reserve occupied space)
-            // (Unless it's the agent itself, obviously)
-            for(int i=0; i<nbAgs; i++) {
-                Location otherPos = model.getAgPos(i);
-                String otherName = (i==0) ? "agent1" : "agent2";
-                if(otherPos.equals(loc) && !otherName.equals(agName)) {
-                     // Path blocked by physical agent
-                     return false; 
-                }
-            }
-
-            // Check Reservations
-            if (reservationTable.containsKey(loc)) {
-                Reservation res = reservationTable.get(loc);
-                if (res.agentName.equals(agName)) continue; // I already own it, extend/keep
-
-                // Conflict detected!
-                if (priority > res.priority) {
-                    // I am heavier. I will OVERWRITE this reservation in the next phase.
-                    // This is the "Bully" logic.
-                    continue; 
-                } else {
-                    // I am lighter or equal. I must yield.
-                    return false;
-                }
-            }
-        }
-
-        // 2. Booking Phase (Commit)
-        // Clear previous reservations for this agent to avoid clutter? 
-        // No, we might want to keep the current tile reserved. 
-        // Ideally, we clear old path reservations not in the new path, but for simplicity:
-        // We just overwrite the path.
-        
-        for (Location loc : path) {
-            reservationTable.put(loc, new Reservation(agName, priority));
-        }
-        
-        return true;
-    }
-
-    // Clears reservations for a specific tile (used after moving out of it)
-    private void clearReservation(Location loc, String agName) {
-        if (reservationTable.containsKey(loc)) {
-            if (reservationTable.get(loc).agentName.equals(agName)) {
-                reservationTable.remove(loc);
-            }
-        }
-    }
 
     private void startNewEpisode() {
         System.out.println("--- STARTING EPISODE " + (currentEpisode) + " ---");
@@ -180,7 +110,6 @@ public class GridEnvironment extends Environment {
         inventory1.clear();
         inventory2.clear();
         goalsDone.clear();
-        reservationTable.clear(); // Clear all locks
 
         agentPos1 = new Location(0, 4);
         agentPos2 = new Location(2, 2);
@@ -483,22 +412,7 @@ public class GridEnvironment extends Environment {
                 }
             }
         }
-
-        // --- NEW: Reservation Check ---
-        // You can only move if you hold the reservation OR if the tile is free and unreserved.
-        // But strictly enforcing: You MUST reserve before moving.
-        if (reservationTable.containsKey(newPos)) {
-            Reservation res = reservationTable.get(newPos);
-            if (!res.agentName.equals(agName)) {
-                System.out.println("MOVE BLOCKED: " + agName + " tried to enter " + newPos.x+","+newPos.y + " reserved by " + res.agentName);
-                return false; 
-            }
-        }
-
         try {
-            // Free the old tile reservation
-            clearReservation(currentPos, agName);
-            
             model.setAgPos(agId, newPos);
             if (agId == 0) agentPos1 = newPos;
             if (agId == 1) agentPos2 = newPos;
@@ -532,6 +446,12 @@ public class GridEnvironment extends Environment {
         }
 
         if (currentPos.equals(objLoc)) {
+            // Check if object is physically present (prevent duplicate pickup)
+            if (!model.hasObject(mask, objLoc)) {
+                 System.out.println("PICKUP ERROR: " + obj + " is not physically on grid (already picked up?).");
+                 return false;
+            }
+
             currentInv.add(obj);
             model.remove(mask, objLoc.x, objLoc.y);
             System.out.println( "PICKUP SUCCESS: " + agName + " picked up " + obj + ". Inventory now: " + currentInv);
@@ -637,6 +557,13 @@ public class GridEnvironment extends Environment {
         // Add obstacle percepts
         for (Location obs : obstacles) {
             addPercept(agName, Literal.parseLiteral("obstacle(" + obs.x + "," + obs.y + ")"));
+        }
+
+        // Add info about OTHER agent's position
+        String otherAgName = (agName.equals("agent1")) ? "agent2" : "agent1";
+        Location otherPos = getAgPos(otherAgName);
+        if (otherPos != null) {
+            addPercept(agName, Literal.parseLiteral("other_agent_at(" + otherPos.x + "," + otherPos.y + ")"));
         }
 
         // Add goal percepts
