@@ -123,6 +123,7 @@ public class GridEnvironment extends Environment {
         }
 
         model.resetObjects();
+        actions.CalculateEpisodeScore.resetCosts();
 
         updatePercepts("agent1");
         updatePercepts("agent2");
@@ -131,8 +132,8 @@ public class GridEnvironment extends Environment {
 
     private void triggerNextEpisode(String agName) {
         System.out.println("SUCCESS! Agent completed Episode " + currentEpisode);
-        currentEpisode++;
-        if (currentEpisode <= MAX_EPISODES) {
+        if (currentEpisode < MAX_EPISODES) {
+            currentEpisode++;
             // try { Thread.sleep(500); } catch (Exception e) {}
             startNewEpisode();
         } else {

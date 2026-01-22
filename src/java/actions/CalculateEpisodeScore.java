@@ -17,6 +17,11 @@ public class CalculateEpisodeScore extends DefaultInternalAction {
     private static int agent1Cost = -1;
     private static int agent2Cost = -1;
 
+    public static void resetCosts() {
+        agent1Cost = -1;
+        agent2Cost = -1;
+    }
+
     @Override
     public Object execute(TransitionSystem ts, Unifier un, Term[] args) throws Exception {
 

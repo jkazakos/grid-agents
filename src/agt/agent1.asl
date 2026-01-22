@@ -16,9 +16,10 @@ tools_available(Tools) :- not (.member(T, Tools) & not holding(T) & not at(T, _,
 !start.
 
 +episode(Ep) : Ep > 10
-   <- .print(">>> MAX RUNS REACHED (", Ep-1, "). Stopping agent. <<<").
+   <- .print(">>> MAX RUNS REACHED (", Ep-1, "). Stopping agent. <<<");
+      .stopMAS.
 
-+episode(Ep) : true 
++episode(Ep) : Ep <= 10
    <- .print("--- NEW EPISODE ", Ep, " ---");
       .drop_all_intentions;
       .abolish(holding(_));
@@ -241,8 +242,11 @@ tools_available(Tools) :- not (.member(T, Tools) & not holding(T) & not at(T, _,
       .print("DEBUG: Preparing inventory for ", ID);
       !prepare_inventory(Tools, Target);
       .print("DEBUG: Inventory prepared. Going to target ", Target);
+      // Store current target for priority calculations
+      -+current_target(Tx, Ty);
       // Go to target
       !go_to(Tx, Ty);
+      -current_target(_,_);
       
       // Verification: Ensure I am still at target (might have yielded)
       ?pos(CX, CY);
@@ -373,7 +377,9 @@ tools_available(Tools) :- not (.member(T, Tools) & not holding(T) & not at(T, _,
           
           if (not Blocked) {
               .print("Attempting move ", Dir);
+              .broadcast(tell, intend_move(Nx, Ny));
               move(Dir);
+              .abolish(intend_move(_,_));
               // Track actual cost: weight based on tools held
               .count(holding(_), ToolCount);
               if (ToolCount == 0) { W = 1; }
@@ -419,7 +425,10 @@ tools_available(Tools) :- not (.member(T, Tools) & not holding(T) & not at(T, _,
           // Use a goal for alternate path calculation to handle failure
           !do_alt_path(Cx, Cy, Tx, Ty);
       } else {
-          .wait(500);
+          .random(R);
+          WaitTime = 500 + (WaitCount * 200) + (R * 500);
+          .print("Collision wait: ", WaitTime);
+          .wait(WaitTime);
           !go_to_step(Tx, Ty, WaitCount + 1);
       }.
 
@@ -495,9 +504,21 @@ tools_available(Tools) :- not (.member(T, Tools) & not holding(T) & not at(T, _,
       } else {
           !calculate_priority_minimal(MyP);
           .my_name(Me);
-          // If priorities are close, use strict tie-breaker to prevent oscillation
-          if (ReqP > MyP | (ReqP == MyP & Ag == agent1 & Me == agent2)) {
-              .print("Yielding to ", Ag, " (", ReqP, " > ", MyP, ")");
+          ?pos(Cx, Cy);
+          // DETECT SWAP (Head-on collision)
+          if (intend_move(Cx, Cy)[source(Ag)]) {
+              .print("Detected HEAD-ON collision with ", Ag, ". Using strict tie-breaker.");
+              if (Ag == agent1 & Me == agent2) {
+                  .print("Yielding to ", Ag, " (Swap detected, Agent 2 yields)");
+                  .wait(500);
+                  !step_aside;
+              } else {
+                  .print("Not yielding to ", Ag, " (Swap detected, I am higher rank)");
+              }
+          } 
+          // REGULAR CONFLICT
+          elif (ReqP > MyP | (math.abs(ReqP - MyP) <= 2 & Ag == agent1 & Me == agent2)) {
+              .print("Yielding to ", Ag, " (", ReqP, " approx > ", MyP, ")");
               // Add a small random wait so we don't sync up perfectly on the retry
               .random(R);
               .wait(R * 200 + 100);
@@ -511,10 +532,13 @@ tools_available(Tools) :- not (.member(T, Tools) & not holding(T) & not at(T, _,
 +!calculate_priority_minimal(P)
    <- if (busy(true)) {
           .count(holding(_), Tools);
-          // We don't know exact distance to their target, but we know our own.
-          // Adding simplified distance metric to avoid constant ties
           ?pos(X, Y);
-          Dist = (math.abs(X-2) + math.abs(Y-2)); // Approx dist to center
+          if (current_target(Tx, Ty)) {
+              Dist = math.abs(X - Tx) + math.abs(Y - Ty);
+          } else {
+              // Fallback if target unknown
+              Dist = (math.abs(X-2) + math.abs(Y-2));
+          }
           P = (Tools * 10) + (10 - Dist);
       } else {
           // Idle agents have priority 0, so they always yield
@@ -526,7 +550,7 @@ tools_available(Tools) :- not (.member(T, Tools) & not holding(T) & not at(T, _,
    <- .print("Critical Movement Error. Aborting step.");
       .fail.
 
-+!finish_episode
++!finish_episode : episode(Ep) & Ep <= 10
    <- ?step_count(C);
       .print("Reporting my weighted steps: ", C);
       actions.CalculateEpisodeScore(C, Score);
@@ -534,6 +558,9 @@ tools_available(Tools) :- not (.member(T, Tools) & not holding(T) & not at(T, _,
       .wait(500);
       finish_episode;
       .print("Environment reset triggered.").
+
++!finish_episode : true
+   <- .print("Episode finished at MAX limit. No more episodes to trigger.").
 
 // Compare and select the better option
 +!compare_and_select(ID1, C1, ID2, C2, ID1, C1) : C1 <= C2.
