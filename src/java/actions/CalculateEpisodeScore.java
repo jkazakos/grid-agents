@@ -14,24 +14,47 @@ import env.GridEnvironment;
  */
 public class CalculateEpisodeScore extends DefaultInternalAction {
 
+    private static int agent1Cost = -1;
+    private static int agent2Cost = -1;
+
     @Override
     public Object execute(TransitionSystem ts, Unifier un, Term[] args) throws Exception {
 
-        // The cost of the selected path
+        String agName = ts.getAgArch().getAgName();
         int pathCost = (int) Math.round(((NumberTerm) args[0]).solve());
 
-        // Actual cost number
-        double actualCost = (double) pathCost / 100.0;
+        if (agName.equals("agent1")) {
+            agent1Cost = pathCost;
+        } else {
+            agent2Cost = pathCost;
+        }
 
-        // The rewards from completing the objectives
-        double rewards = 2.8;
+        // Only calculate final score when BOTH agents have reported
+        if (agent1Cost != -1 && agent2Cost != -1) {
+            int totalCost = agent1Cost + agent2Cost;
+            
+            // Actual cost number
+            double actualCost = (double) totalCost / 100.0;
 
-        // The final score of the episode
-        double finalScore = rewards - actualCost;
+            // The rewards from completing the objectives
+            double rewards = 2.8;
 
-        // Adding the score to the total score
-        GridEnvironment.addEpisodeScore(finalScore);
+            // The final score of the episode
+            double finalScore = rewards - actualCost;
 
-        return un.unifies(args[1], new NumberTermImpl(finalScore));
+            // Adding the score to the total score
+            GridEnvironment.addEpisodeScore(finalScore);
+
+            System.out.println("EPISODE FINISHED: Total Cost=" + totalCost + " Final Score=" + finalScore);
+
+            // Reset for next episode
+            agent1Cost = -1;
+            agent2Cost = -1;
+
+            return un.unifies(args[1], new NumberTermImpl(finalScore));
+        }
+
+        // First agent to report gets a 0 return (or it can be ignored)
+        return un.unifies(args[1], new NumberTermImpl(0));
     }
 }

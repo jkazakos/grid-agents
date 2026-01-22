@@ -30,6 +30,7 @@ tools_available(Tools) :- not (.member(T, Tools) & not holding(T) & not at(T, _,
       .abolish(task_dropped(_));
       .abolish(busy(_));
       .abolish(step_count(_));
+      .abolish(cost_report(_));
       -+episode_cost(0);
       +ignored_tasks([]);
       +busy(false);
@@ -45,9 +46,13 @@ tools_available(Tools) :- not (.member(T, Tools) & not holding(T) & not at(T, _,
       !decide_next_action.
 
 // If I have no tasks left, wait
++!decide_next_action : open_door & painted_chair & painted_table
+   <- .print("All tasks physically finished. Calculating final score...");
+      !finish_episode.
+
 +!decide_next_action : .count(task(ID,_,_,_) & not completed(ID), 0)
-   <- .print("I am done. Waiting for episode end...");
-      .wait(2000);
+   <- .print("I have no more tasks to do. Waiting for others to finish...");
+      .wait(1000);
       !decide_next_action.
 
 // Main decision loop
@@ -467,6 +472,14 @@ tools_available(Tools) :- not (.member(T, Tools) & not holding(T) & not at(T, _,
           .nth(0, Safes, loc(Sx, Sy, Dir));
           .print("Stepping aside to ", Sx, ",", Sy);
           move(Dir);
+          // Track actual cost: weight based on tools held
+          .count(holding(_), ToolCount);
+          if (ToolCount == 0) { W = 1; }
+          elif (ToolCount == 1) { W = 2; }
+          else { W = 4; }
+          ?step_count(S);
+          -+step_count(S + W);
+          .print("Yield step cost: ", W, " Total: ", S + W);
       } else {
           .print("No room to step aside!");
       }.
@@ -515,12 +528,12 @@ tools_available(Tools) :- not (.member(T, Tools) & not holding(T) & not at(T, _,
 
 +!finish_episode
    <- ?step_count(C);
-      .print("Total weighted steps this episode: ", C);
+      .print("Reporting my weighted steps: ", C);
       actions.CalculateEpisodeScore(C, Score);
-      .print("EPISODE FINISHED");
-      .print("Episode Score: ", Score);
-      .wait(200);
-      finish_episode.
+      // Wait a bit to ensure the other agent also has time to report before reset
+      .wait(500);
+      finish_episode;
+      .print("Environment reset triggered.").
 
 // Compare and select the better option
 +!compare_and_select(ID1, C1, ID2, C2, ID1, C1) : C1 <= C2.

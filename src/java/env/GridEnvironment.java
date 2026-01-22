@@ -383,10 +383,12 @@ public class GridEnvironment extends Environment {
         updatePercepts("agent2");
         informAgsEnvironmentChanged();
 
+        /* Removed automatic trigger to allow agents to calculate score first
         if (result && goalsDone.size() >= 3) {
             try { Thread.sleep(1000); } catch (Exception e) {}
             triggerNextEpisode(agName);
         }
+        */
 
         return result;
     }
