@@ -9,6 +9,7 @@ completed(none).
 episode_cost(0).
 ignored_tasks([]).
 busy(false).
+step_count(0).
 tools_available(Tools) :- not (.member(T, Tools) & not holding(T) & not at(T, _, _)).
 
 
@@ -28,9 +29,11 @@ tools_available(Tools) :- not (.member(T, Tools) & not holding(T) & not at(T, _,
       .abolish(task_completed(_));
       .abolish(task_dropped(_));
       .abolish(busy(_));
+      .abolish(step_count(_));
       -+episode_cost(0);
       +ignored_tasks([]);
       +busy(false);
+      +step_count(0);
       !start.
 
 //? MAIN CONTROL LOOP
@@ -366,6 +369,14 @@ tools_available(Tools) :- not (.member(T, Tools) & not holding(T) & not at(T, _,
           if (not Blocked) {
               .print("Attempting move ", Dir);
               move(Dir);
+              // Track actual cost: weight based on tools held
+              .count(holding(_), ToolCount);
+              if (ToolCount == 0) { W = 1; }
+              elif (ToolCount == 1) { W = 2; }
+              else { W = 4; }
+              ?step_count(S);
+              -+step_count(S + W);
+              .print("Step cost: ", W, " Total: ", S + W);
               !go_to_step(Tx, Ty, 0); // Reset wait count on successful move
           } else {
               if (other_agent_at(Nx, Ny)) {
@@ -464,23 +475,34 @@ tools_available(Tools) :- not (.member(T, Tools) & not holding(T) & not at(T, _,
 
 +yield_request(ReqP)[source(Ag)]
    <- ?pos(Cx, Cy);
-      ?other_agent_at(Ox, Oy); // This is me from their perspective if we aren't updated?
-      // Wait, other_agent_at in my percepts is the OTHER agent.
-      // I am at Cx, Cy.
-      // I only yield if ReqP > MyP OR if we are tied and Ag is agent1 (arbitrary tie-break)
-      !calculate_priority_minimal(MyP);
-      .my_name(Me);
-      if (ReqP > MyP | (ReqP == MyP & Ag == agent1 & Me == agent2)) {
-          .print("Yielding to ", Ag, " (", ReqP, " > ", MyP, ")");
+      ?busy(IsBusy);
+      if (not IsBusy) {
+          .print("I am idle. Yielding to ", Ag, " immediately.");
           !step_aside;
       } else {
-          .print("Not yielding to ", Ag, " (", ReqP, " <= ", MyP, ")");
-      }.
+          !calculate_priority_minimal(MyP);
+          .my_name(Me);
+          // If priorities are close, use strict tie-breaker to prevent oscillation
+          if (ReqP > MyP | (ReqP == MyP & Ag == agent1 & Me == agent2)) {
+              .print("Yielding to ", Ag, " (", ReqP, " > ", MyP, ")");
+              // Add a small random wait so we don't sync up perfectly on the retry
+              .random(R);
+              .wait(R * 200 + 100);
+              !step_aside;
+          } else {
+              .print("Not yielding to ", Ag, " (", ReqP, " <= ", MyP, ")");
+          }
+      };
+      .abolish(yield_request(_)).
 
 +!calculate_priority_minimal(P)
    <- if (busy(true)) {
           .count(holding(_), Tools);
-          P = (Tools * 10);
+          // We don't know exact distance to their target, but we know our own.
+          // Adding simplified distance metric to avoid constant ties
+          ?pos(X, Y);
+          Dist = (math.abs(X-2) + math.abs(Y-2)); // Approx dist to center
+          P = (Tools * 10) + (10 - Dist);
       } else {
           // Idle agents have priority 0, so they always yield
           P = 0;
@@ -492,7 +514,8 @@ tools_available(Tools) :- not (.member(T, Tools) & not holding(T) & not at(T, _,
       .fail.
 
 +!finish_episode
-   <- ?episode_cost(C);
+   <- ?step_count(C);
+      .print("Total weighted steps this episode: ", C);
       actions.CalculateEpisodeScore(C, Score);
       .print("EPISODE FINISHED");
       .print("Episode Score: ", Score);
@@ -507,4 +530,3 @@ tools_available(Tools) :- not (.member(T, Tools) & not holding(T) & not at(T, _,
 +task_completed(ID)[source(Ag)]
    <- +completed(ID);
       .print("Learned from ", Ag, " that task ", ID, " is done.").
-

@@ -117,7 +117,11 @@ public class GridEnvironment extends Environment {
         try {
             model.setAgPos(0, agentPos1);
             model.setAgPos(1, agentPos2);
-        } catch (Exception e) {}
+        } catch (Exception e) {
+            System.out.println("Error setting agent positions: " + e.getMessage());
+            e.printStackTrace();
+        }
+
         model.resetObjects();
 
         updatePercepts("agent1");
