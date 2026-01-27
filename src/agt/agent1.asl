@@ -10,6 +10,12 @@ episode_cost(0).
 ignored_tasks([]).
 busy(false).
 step_count(0).
+
+// Graduated step-aside escalation
+yield_attempt_count(0).
+max_yield_attempts(3).
+safe_zone_center(2, 2).
+safe_zone_tiles([loc(1,2), loc(2,1), loc(2,2), loc(2,3), loc(3,2)]).
 tools_available(Tools) :- not (.member(T, Tools) & not holding(T) & not at(T, _, _)).
 
 
@@ -32,10 +38,12 @@ tools_available(Tools) :- not (.member(T, Tools) & not holding(T) & not at(T, _,
       .abolish(busy(_));
       .abolish(step_count(_));
       .abolish(cost_report(_));
+      .abolish(yield_attempt_count(_));
       -+episode_cost(0);
       +ignored_tasks([]);
       +busy(false);
       +step_count(0);
+      +yield_attempt_count(0);
       !start.
 
 //? MAIN CONTROL LOOP
@@ -356,7 +364,9 @@ tools_available(Tools) :- not (.member(T, Tools) & not holding(T) & not at(T, _,
    <- !go_to_step(Tx, Ty, 0).
 
 +!go_to_step(Tx, Ty, WaitCount) : pos(Tx, Ty) 
-   <- .print("Arrived at target: ", Tx, ",", Ty).
+   <- .print("Arrived at target: ", Tx, ",", Ty);
+      // Reset yield counter on successful arrival
+      -+yield_attempt_count(0).
 
 +!go_to_step(Tx, Ty, WaitCount) : pos(Cx, Cy)
    <- .print("Thinking about path from ", Cx, ",", Cy, " to ", Tx, ",", Ty);
@@ -469,6 +479,25 @@ tools_available(Tools) :- not (.member(T, Tools) & not holding(T) & not at(T, _,
 +!calculate_next_pos(X, Y, right, NX, Y) <- NX = X + 1; +temp_next(X, Y, right, NX, Y).
 
 +!step_aside
+   <- // Increment attempt counter
+      ?yield_attempt_count(Attempts);
+      NewAttempts = Attempts + 1;
+      -+yield_attempt_count(NewAttempts);
+      
+      ?max_yield_attempts(Max);
+      
+      if (NewAttempts > Max) {
+          // ESCALATE: Too many failed attempts
+          .print("Step-aside failed ", Max, " times. Escalating to safe zone escape...");
+          -+yield_attempt_count(0);  // Reset counter
+          !escape_to_safe_zone;
+      } else {
+          // TRY: Single-step aside (existing logic)
+          .print("Step-aside attempt ", NewAttempts, "/", Max);
+          !try_single_step_aside;
+      }.
+
++!try_single_step_aside
    <- ?pos(Cx, Cy);
       .abolish(temp_next(_, _, _, _, _));
       !calculate_next_pos(Cx, Cy, up, _, _);
@@ -489,9 +518,60 @@ tools_available(Tools) :- not (.member(T, Tools) & not holding(T) & not at(T, _,
           ?step_count(S);
           -+step_count(S + W);
           .print("Yield step cost: ", W, " Total: ", S + W);
+          // Success! Reset the yield counter
+          -+yield_attempt_count(0);
       } else {
-          .print("No room to step aside!");
+          .print("No room to step aside! Will escalate if this continues...");
       }.
+
++!escape_to_safe_zone
+   <- ?pos(Cx, Cy);
+      ?safe_zone_center(Tx, Ty);
+      .print("Escaping to central safe zone at ", Tx, ",", Ty);
+      
+      // Check if we're already in the safe zone
+      if ((math.abs(Cx - Tx) <= 1) & (math.abs(Cy - Ty) <= 1)) {
+          .print("Already near safe zone. Waiting for path to clear...");
+          .wait(1000);
+      } else {
+          // Try to path to center, avoiding the other agent
+          !try_escape_path(Tx, Ty);
+      }.
+
++!try_escape_path(Tx, Ty)
+   <- ?pos(Cx, Cy);
+      if (actions.PathTo(Cx, Cy, Tx, Ty, _, true)) {
+          // Path exists, go there step by step
+          .print("Path to safe zone found. Moving...");
+          !go_to_step(Tx, Ty, 0);
+      } else {
+          // No path to center, try adjacent safe zone tiles
+          .print("No direct path to center. Trying alternate safe tiles...");
+          !try_alternate_safe_tiles;
+      }.
+
+// Failure handler for try_escape_path
+-!try_escape_path(Tx, Ty)
+   <- .print("Failed to path to safe zone. Trying alternate tiles...");
+      !try_alternate_safe_tiles.
+
++!try_alternate_safe_tiles
+   <- ?safe_zone_tiles(Tiles);
+      ?pos(Cx, Cy);
+      .findall(loc(X, Y), (
+          .member(loc(X,Y), Tiles) & 
+          actions.PathTo(Cx, Cy, X, Y, _, true)
+      ), Reachable);
+      if (.length(Reachable, L) & L > 0) {
+          .nth(0, Reachable, loc(Sx, Sy));
+          .print("Escaping to alternate safe tile at ", Sx, ",", Sy);
+          !go_to_step(Sx, Sy, 0);
+      } else {
+          // Last resort: just wait for situation to resolve
+          .print("No safe escape path available. Waiting...");
+          .wait(2000);
+      }.
+
 
 // ? YIELD LOGIC
 

@@ -134,7 +134,7 @@ public class GridEnvironment extends Environment {
         System.out.println("SUCCESS! Agent completed Episode " + currentEpisode);
         if (currentEpisode < MAX_EPISODES) {
             currentEpisode++;
-            // try { Thread.sleep(500); } catch (Exception e) {}
+            try { Thread.sleep(500); } catch (Exception e) {}
             startNewEpisode();
         } else {
             printFinalStatistics();

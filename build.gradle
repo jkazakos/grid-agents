@@ -28,13 +28,12 @@ sourceSets {
 }
 
 application {
-    mainClass = 'jason.infra.centralised.RunCentralisedMAS'
+    mainClass = 'Main'
 }
 
 compileJava.options.encoding = 'UTF-8'
 
 tasks.named('run') {
     args 'grid_agent.mas2j'
-    
     standardInput = System.in
 }
