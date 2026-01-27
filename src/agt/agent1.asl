@@ -19,6 +19,20 @@ safe_zone_center(2, 2).
 safe_zone_tiles([loc(1,2), loc(2,1), loc(2,2), loc(2,3), loc(3,2)]).
 tools_available(Tools) :- not (.member(T, Tools) & not holding(T) & not at(T, _, _)).
 
+// Corridor zone detection - right side of grid where conflicts occur
+corridor_zone(X, Y) :- X >= 4 & Y <= 2.
+
+// Check if a position has limited escape routes (narrow corridor)
+narrow_corridor_position(X, Y) :-
+    not obstacle(X, Y) &
+    .count(D, (
+        (D = up & NY = Y - 1 & NX = X) |
+        (D = down & NY = Y + 1 & NX = X) |
+        (D = left & NX = X - 1 & NY = Y) |
+        (D = right & NX = X + 1 & NY = Y)
+    ) & NX >= 0 & NX < 5 & NY >= 0 & NY < 5 & not obstacle(NX, NY), FreeNeighbors) &
+    FreeNeighbors <= 2.
+
 
 !start.
 
@@ -289,6 +303,8 @@ tools_available(Tools) :- not (.member(T, Tools) & not holding(T) & not at(T, _,
       !perform_action(Type, Target);
       // Update the task as completed
       +completed(ID);
+      // Notify other agents that this tile is now free
+      .broadcast(tell, tile_cleared(Tx, Ty));
       .broadcast(tell, task_completed(ID));  // Broadcast to other agents
       .print("Task ", ID, " completed.").
 
@@ -449,6 +465,8 @@ tools_available(Tools) :- not (.member(T, Tools) & not holding(T) & not at(T, _,
    <- !calculate_priority(Tx, Ty, MyP);
       .print("Collision at ", Nx, ",", Ny, "! My Priority: ", MyP);
       .broadcast(tell, yield_request(MyP));
+      // NEW: Send blocking message to stationary agent
+      .broadcast(tell, blocking_my_path(Nx, Ny, Tx, Ty));
       
       if (WaitCount > 5) {
           .print("Persistent conflict! Trying to path AROUND the other agent...");
@@ -547,16 +565,45 @@ tools_available(Tools) :- not (.member(T, Tools) & not holding(T) & not at(T, _,
 
 +!escape_to_safe_zone
    <- ?pos(Cx, Cy);
-      ?safe_zone_center(Tx, Ty);
-      .print("Escaping to central safe zone at ", Tx, ",", Ty);
+      .print("Finding best escape position from ", Cx, ",", Cy);
       
-      // Check if we're already in the safe zone
-      if ((math.abs(Cx - Tx) <= 1) & (math.abs(Cy - Ty) <= 1)) {
-          .print("Already near safe zone. Waiting for path to clear...");
-          .wait(1000);
+      // Context-aware escape: find nearest tile with good escape routes (3+ free neighbors)
+      // First, check if we're in the corridor zone - if so, prioritize moving left/out
+      if (corridor_zone(Cx, Cy)) {
+          .print("In corridor zone. Prioritizing escape to open area...");
+          !escape_from_corridor(Cx, Cy);
       } else {
-          // Try to path to center, avoiding the other agent
-          !try_escape_path(Tx, Ty);
+          // Use the safe zone center as fallback
+          ?safe_zone_center(Tx, Ty);
+          if ((math.abs(Cx - Tx) <= 1) & (math.abs(Cy - Ty) <= 1)) {
+              .print("Already near safe zone. Waiting for path to clear...");
+              .wait(1000);
+          } else {
+              !try_escape_path(Tx, Ty);
+          }
+      }.
+
++!escape_from_corridor(Cx, Cy)
+   <- // Try to move to column 2-3 which has more space
+      .findall(loc(X, Y, Dist), (
+          X >= 0 & X <= 3 & Y >= 0 & Y < 5 &
+          not obstacle(X, Y) &
+          Dist = math.abs(X - Cx) + math.abs(Y - Cy) &
+          Dist > 0
+      ), OpenTiles);
+      // Sort by distance and find reachable tile
+      !find_reachable_escape(OpenTiles, Cx, Cy).
+
++!find_reachable_escape([], Cx, Cy)
+   <- .print("No open escape tiles found. Waiting...");
+      .wait(1500).
+
++!find_reachable_escape([loc(X, Y, _)|Rest], Cx, Cy)
+   <- if (actions.PathTo(Cx, Cy, X, Y, _, true)) {
+          .print("Escaping corridor to open tile at ", X, ",", Y);
+          !go_to_step(X, Y, 0);
+      } else {
+          !find_reachable_escape(Rest, Cx, Cy);
       }.
 
 +!try_escape_path(Tx, Ty)
@@ -629,6 +676,35 @@ tools_available(Tools) :- not (.member(T, Tools) & not holding(T) & not at(T, _,
           }
       };
       .abolish(yield_request(_)).
+
+// Handle blocking_my_path message - respond when I'm blocking another agent's path
++blocking_my_path(BlockedX, BlockedY, OtherTargetX, OtherTargetY)[source(Ag)]
+   <- ?pos(MyX, MyY);
+      // Am I at the tile they can't get past?
+      if (MyX == BlockedX & MyY == BlockedY) {
+          .print("I am at ", MyX, ",", MyY, " blocking ", Ag, "'s path to ", OtherTargetX, ",", OtherTargetY);
+          // Check if I've completed my current action here
+          ?busy(IsBusy);
+          if (not IsBusy) {
+              .print("I'm idle and blocking ", Ag, ". Stepping aside immediately.");
+              !step_aside;
+          } else {
+              // I'm busy - check if I just finished my task at this location
+              .findall(ID, (completed(ID) & task(ID, _, Target, _) & at(Target, MyX, MyY)), CompletedHere);
+              if (.length(CompletedHere, CL) & CL > 0) {
+                  .print("I completed my task here. Stepping aside for ", Ag);
+                  !step_aside;
+              } else {
+                  .print("Still working at this location. ", Ag, " must wait.");
+              }
+          }
+      };
+      .abolish(blocking_my_path(_, _, _, _)).
+
+// Handle tile_cleared message - wake up if we were waiting for this tile
++tile_cleared(X, Y)[source(Ag)]
+   <- .print("Tile ", X, ",", Y, " cleared by ", Ag, ".");
+      .abolish(tile_cleared(_, _)).
 
 +!calculate_priority_minimal(P)
    <- if (busy(true)) {
