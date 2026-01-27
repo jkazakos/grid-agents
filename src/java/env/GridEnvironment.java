@@ -42,7 +42,7 @@ public class GridEnvironment extends Environment {
     private boolean episodeFinished = false;
 
     private int currentEpisode = 1;
-    private final int MAX_EPISODES = 10;
+    private final int MAX_EPISODES = 100;
     private Random random = new Random();
 
     public static int getWidth() {
@@ -325,7 +325,7 @@ public class GridEnvironment extends Environment {
             add(COLOR, 4, 0);
 
             // Place Door
-            Location doorLoc = getFreeLocation(forbidden);
+            Location doorLoc = new Location(4, 1); // Hardcoded location to test conflict resolution
             objects.put("door", doorLoc);
             add(DOOR, doorLoc.x, doorLoc.y);
             forbidden.add(doorLoc);

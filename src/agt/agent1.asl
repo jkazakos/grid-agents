@@ -33,17 +33,21 @@ narrow_corridor_position(X, Y) :-
     ) & NX >= 0 & NX < 5 & NY >= 0 & NY < 5 & not obstacle(NX, NY), FreeNeighbors) &
     FreeNeighbors <= 2.
 
+// Hardcoded dead-end corners that should be avoided
+// (4,0) is a dead-end: only exit is (4,1)
+corridor_corner(4, 0).
+
 
 !start.
 
-+episode(Ep) : Ep > 10
++episode(Ep) : Ep > 100
    <- .print(">>> MAX RUNS REACHED (", Ep-1, "). Stopping agents. <<<");
       .drop_all_intentions;
       .abolish(holding(_));
       .abolish(doing(_));
       .print("Final stats are visible in the console.").
 
-+episode(Ep) :current_ep(OldEp) & Ep > OldEp & Ep <= 10
++episode(Ep) :current_ep(OldEp) & Ep > OldEp & Ep <= 100
    <- -+current_ep(Ep);
       .print("--- NEW EPISODE ", Ep, " ---");
       .drop_all_intentions;
@@ -172,7 +176,12 @@ narrow_corridor_position(X, Y) :-
 //? OUTCOME HANDLERS
 // I WON: Add Cost & Execute
 +!handle_outcome(win, TaskID, Cost)
-   <- .print("Negotiation WON for ", TaskID);
+   <- // Check for problematic door scenario
+      if (TaskID == open_door & at(door, 4, 1)) {
+          .print("Door at (4,1) detected. Adding coordination delay...");
+          .wait(1500);
+      }
+      .print("Negotiation WON for ", TaskID);
       ?task(TaskID, _, _, RequiredTools);
       -+ignored_tasks([]);
       !execute_task(TaskID);
@@ -543,8 +552,23 @@ narrow_corridor_position(X, Y) :-
       !calculate_next_pos(Cx, Cy, down, _, _);
       !calculate_next_pos(Cx, Cy, left, _, _);
       !calculate_next_pos(Cx, Cy, right, _, _);
-      // Simple escape: move to a neighbor that isn't where the other agent is and isn't a wall
-      .findall(loc(Nx, Ny, D), (temp_next(Cx, Cy, D, Nx, Ny) & not actions.IsBlocked(Nx, Ny, true)), Safes);
+      
+      // Corridor-aware escape: prioritize moving DOWN/LEFT to get out
+      // Also avoid stepping into dead-end corners like (4,0)
+      if (corridor_zone(Cx, Cy)) {
+          .findall(loc(Nx, Ny, D), (temp_next(Cx, Cy, D, Nx, Ny) & not actions.IsBlocked(Nx, Ny, true) & not corridor_corner(Nx, Ny)), GoodSafes);
+          
+          .findall(loc(Nx, Ny, D), (.member(loc(Nx,Ny,D), GoodSafes) & D == down), DownMoves);
+          .findall(loc(Nx, Ny, D), (.member(loc(Nx,Ny,D), GoodSafes) & D == left), LeftMoves);
+          .findall(loc(Nx, Ny, D), (.member(loc(Nx,Ny,D), GoodSafes) & D \== down & D \== left), OtherGoodMoves);
+          
+          .concat(DownMoves, LeftMoves, Temp1);
+          .concat(Temp1, OtherGoodMoves, Safes);
+      } else {
+          // Simple escape: move to a neighbor that isn't where the other agent is and isn't a wall
+          .findall(loc(Nx, Ny, D), (temp_next(Cx, Cy, D, Nx, Ny) & not actions.IsBlocked(Nx, Ny, true)), Safes);
+      }
+
       if (.length(Safes, L) & L > 0) {
           .nth(0, Safes, loc(Sx, Sy, Dir));
           .print("Stepping aside to ", Sx, ",", Sy);
@@ -646,7 +670,21 @@ narrow_corridor_position(X, Y) :-
 +yield_request(ReqP)[source(Ag)]
    <- ?pos(Cx, Cy);
       ?busy(IsBusy);
-      if (not IsBusy) {
+      // SPECIAL CASE: If I am at the dead-end corner (4,0), I can't yield!
+      // The other agent must back up to let me out.
+      if (Cx == 4 & Cy == 0 & other_agent_at(4, 1)) {
+          .print("I am trapped at corner (4,0)! ", Ag, " at (4,1) must back up to (4,2).");
+          .broadcast(tell, blocking_my_path(4, 1, 4, 2));
+      } 
+      // SPECIAL CASE: Corridor exit logic
+      // If I am at (4,1) and Ag is at (4,2), I should NOT yield even if idle, 
+      // because the only way for me to escape is through (4,2).
+      elif (Cx == 4 & Cy == 1 & other_agent_at(4, 2)) {
+          .print("I am at corridor bottleneck (4,1). ", Ag, " must back up from (4,2) to let me out.");
+          // Don't yield. Instead, ask them to move.
+          .broadcast(tell, blocking_my_path(4, 2, 3, 2));
+      } 
+      elif (not IsBusy) {
           .print("I am idle. Yielding to ", Ag, " immediately.");
           !step_aside;
       } else {
@@ -680,8 +718,45 @@ narrow_corridor_position(X, Y) :-
 // Handle blocking_my_path message - respond when I'm blocking another agent's path
 +blocking_my_path(BlockedX, BlockedY, OtherTargetX, OtherTargetY)[source(Ag)]
    <- ?pos(MyX, MyY);
+      // SPECIAL CASE: If the trapped agent is at (4,0) and I am at (4,1),
+      // I need to back up TWO tiles (to 4,3) to let them escape, then wait
+      if (other_agent_at(4, 0) & MyX == 4 & MyY == 1) {
+          .print("Agent at (4,0) is trapped! I'm at (4,1). Backing up to (4,3)...");
+          // First backup step to (4,2)
+          move(down);
+          .count(holding(_), ToolCount);
+          if (ToolCount == 0) { W = 1; }
+          elif (ToolCount == 1) { W = 2; }
+          else { W = 4; }
+          ?step_count(S);
+          -+step_count(S + W);
+          .print("Backup step 1 cost: ", W, " Total: ", S + W);
+          // Second backup step to (4,3)
+          move(down);
+          ?step_count(S2);
+          -+step_count(S2 + W);
+          .print("Backup step 2 cost: ", W, " Total: ", S2 + W);
+          // Tell the trapped agent to escape to safe zone
+          .broadcast(tell, corridor_clear_escape_now);
+          // Wait for the trapped agent to escape
+          .print("Waiting for trapped agent to escape to safe zone...");
+          .wait(2000);
+      }
+      // SPECIAL CASE: If I'm at (4,1) and need to back up for agent going to (4,0)
+      elif (other_agent_at(4, 2) & MyX == 4 & MyY == 1) {
+          .print("Agent pushing from (4,2). Backing up to let them through...");
+          // I'm in the middle, back up toward (4,0) temporarily
+          move(up);
+          .count(holding(_), ToolCount);
+          if (ToolCount == 0) { W = 1; }
+          elif (ToolCount == 1) { W = 2; }
+          else { W = 4; }
+          ?step_count(S);
+          -+step_count(S + W);
+          .wait(1500);
+      }
       // Am I at the tile they can't get past?
-      if (MyX == BlockedX & MyY == BlockedY) {
+      elif (MyX == BlockedX & MyY == BlockedY) {
           .print("I am at ", MyX, ",", MyY, " blocking ", Ag, "'s path to ", OtherTargetX, ",", OtherTargetY);
           // Check if I've completed my current action here
           ?busy(IsBusy);
@@ -700,6 +775,34 @@ narrow_corridor_position(X, Y) :-
           }
       };
       .abolish(blocking_my_path(_, _, _, _)).
+
+// Handle corridor_clear_escape_now message - trapped agent should escape to safe zone
++corridor_clear_escape_now[source(Ag)]
+   <- ?pos(Cx, Cy);
+      if (corridor_corner(Cx, Cy)) {
+          .print("Corridor is clear! Escaping from corner ", Cx, ",", Cy, " to safe zone...");
+          // Move out through the now-clear corridor
+          move(down);  // (4,0) -> (4,1)
+          .count(holding(_), ToolCount);
+          if (ToolCount == 0) { W = 1; }
+          elif (ToolCount == 1) { W = 2; }
+          else { W = 4; }
+          ?step_count(S);
+          -+step_count(S + W);
+          // Keep moving to safe zone (toward 3,2)
+          move(down);  // (4,1) -> (4,2)
+          ?step_count(S2);
+          -+step_count(S2 + W);
+          move(left);  // (4,2) -> (3,2)
+          ?step_count(S3);
+          -+step_count(S3 + W);
+          .print("Escaped to safe zone!");
+          .broadcast(tell, tile_cleared(4, 0));
+      } else {
+          .print("Received escape signal but not at corridor corner.");
+      };
+      .abolish(corridor_clear_escape_now).
+
 
 // Handle tile_cleared message - wake up if we were waiting for this tile
 +tile_cleared(X, Y)[source(Ag)]
@@ -727,7 +830,7 @@ narrow_corridor_position(X, Y) :-
    <- .print("Critical Movement Error. Aborting step.");
       .fail.
 
-+!finish_episode : episode(Ep) & Ep <= 10
++!finish_episode : episode(Ep) & Ep <= 100
    <- ?step_count(C);
       .print("Reporting my weighted steps: ", C);
       actions.CalculateEpisodeScore(C, Score);
