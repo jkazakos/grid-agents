@@ -325,7 +325,7 @@ public class GridEnvironment extends Environment {
             add(COLOR, 4, 0);
 
             // Place Door
-            Location doorLoc = new Location(4, 1); // Hardcoded location to test conflict resolution
+            Location doorLoc = getFreeLocation(forbidden);
             objects.put("door", doorLoc);
             add(DOOR, doorLoc.x, doorLoc.y);
             forbidden.add(doorLoc);
