@@ -39,6 +39,7 @@ public class GridEnvironment extends Environment {
 
     private static double totalScore = 0.0;
     private static int episodeCount = 0;
+    private boolean episodeFinished = false;
 
     private int currentEpisode = 1;
     private final int MAX_EPISODES = 10;
@@ -105,6 +106,7 @@ public class GridEnvironment extends Environment {
 
 
     private void startNewEpisode() {
+        episodeFinished = false;
         System.out.println("--- STARTING EPISODE " + (currentEpisode) + " ---");
 
         inventory1.clear();
@@ -130,14 +132,23 @@ public class GridEnvironment extends Environment {
         informAgsEnvironmentChanged();
     }
 
-    private void triggerNextEpisode(String agName) {
-        System.out.println("SUCCESS! Agent completed Episode " + currentEpisode);
+    private synchronized void triggerNextEpisode(String agName) {
+        if (episodeFinished == true) {
+            System.out.println("Ignored duplicate finish request from " + agName);
+            return;
+        }
+        episodeFinished = true;
+        System.out.println("SUCCESS! Agents completed Episode " + currentEpisode);
         if (currentEpisode < MAX_EPISODES) {
             currentEpisode++;
             try { Thread.sleep(500); } catch (Exception e) {}
             startNewEpisode();
         } else {
             printFinalStatistics();
+            currentEpisode++;
+            updatePercepts("agent1");
+            updatePercepts("agent2");
+            informAgsEnvironmentChanged();
         }
     }
 

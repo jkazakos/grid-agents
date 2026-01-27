@@ -7,6 +7,7 @@ task(open_door, opening,  door,  [key, code]).
 
 completed(none).
 episode_cost(0).
+current_ep(0).
 ignored_tasks([]).
 busy(false).
 step_count(0).
@@ -22,11 +23,15 @@ tools_available(Tools) :- not (.member(T, Tools) & not holding(T) & not at(T, _,
 !start.
 
 +episode(Ep) : Ep > 10
-   <- .print(">>> MAX RUNS REACHED (", Ep-1, "). Stopping agent. <<<");
-      .stopMAS.
+   <- .print(">>> MAX RUNS REACHED (", Ep-1, "). Stopping agents. <<<");
+      .drop_all_intentions;
+      .abolish(holding(_));
+      .abolish(doing(_));
+      .print("Final stats are visible in the console.").
 
-+episode(Ep) : Ep <= 10
-   <- .print("--- NEW EPISODE ", Ep, " ---");
++episode(Ep) :current_ep(OldEp) & Ep > OldEp & Ep <= 10
+   <- -+current_ep(Ep);
+      .print("--- NEW EPISODE ", Ep, " ---");
       .drop_all_intentions;
       .abolish(holding(_));
       .abolish(completed(_));
@@ -46,6 +51,9 @@ tools_available(Tools) :- not (.member(T, Tools) & not holding(T) & not at(T, _,
       +yield_attempt_count(0);
       !start.
 
++episode(Ep) : current_ep(OldEp) & Ep == OldEp
+   <- .print("DEBUG: Ignoring redundant episode signal for ", Ep).
+
 //? MAIN CONTROL LOOP
 +!start : true
    <- .print("Waiting for environment restart...");
@@ -60,9 +68,16 @@ tools_available(Tools) :- not (.member(T, Tools) & not holding(T) & not at(T, _,
       !finish_episode.
 
 +!decide_next_action : .count(task(ID,_,_,_) & not completed(ID), 0)
-   <- .print("I have no more tasks to do. Waiting for others to finish...");
-      .wait(1000);
-      !decide_next_action.
+   <- .print("I have no uncompleted tasks. Checking environment goals...");
+      // Re-check environment percepts - they may have been updated
+      if (open_door & painted_chair & painted_table) {
+          .print("All goals are complete in environment. Finishing...");
+          !finish_episode;
+      } else {
+          .print("Waiting for remaining goals to complete...");
+          .wait(1000);
+          !decide_next_action;
+      }.
 
 // Main decision loop
 +!decide_next_action : true
@@ -72,17 +87,23 @@ tools_available(Tools) :- not (.member(T, Tools) & not holding(T) & not at(T, _,
 
 // No options available
 +!select_best_option([])
-   <- .print("No valid tasks available right now. Waiting...");
-      -+busy(false);
-      // Drop all tools so we don't block with phantom priority
-      .findall(Item, holding(Item), HeldItems);
-      for (.member(I, HeldItems)) {
-          .print("Dropping ", I);
-          drop(I);
-      }
-      .wait(500);
-      -+ignored_tasks([]); // Clear list and try again
-      !decide_next_action.
+   <- // First check if all goals are actually done
+      if (open_door & painted_chair & painted_table) {
+          .print("All goals complete. No more tasks needed.");
+          !finish_episode;
+      } else {
+          .print("No valid tasks available right now. Waiting...");
+          -+busy(false);
+          // Drop all tools so we don't block with phantom priority
+          .findall(Item, holding(Item), HeldItems);
+          for (.member(I, HeldItems)) {
+              .print("Dropping ", I);
+              drop(I);
+          }
+          .wait(500);
+          -+ignored_tasks([]); // Clear list and try again
+          !decide_next_action;
+      }.
 
 // Options available -> Evaluate and negotiate
 +!select_best_option(Options)
@@ -636,8 +657,16 @@ tools_available(Tools) :- not (.member(T, Tools) & not holding(T) & not at(T, _,
       actions.CalculateEpisodeScore(C, Score);
       // Wait a bit to ensure the other agent also has time to report before reset
       .wait(500);
-      finish_episode;
-      .print("Environment reset triggered.").
+      .my_name(Me);
+      if (Me == agent1) {
+          .print("I am Agent 1. Waiting for partner to report...");
+          // Wait 1-2 seconds to let Agent 2 finish reporting before we kill the episode.
+          .wait(1500); 
+          .print("Triggering Environment Reset now.");
+          finish_episode;
+      } else {
+          .print("I am Agent 2. Waiting for Agent 1 to trigger reset.");
+      }.
 
 +!finish_episode : true
    <- .print("Episode finished at MAX limit. No more episodes to trigger.").
