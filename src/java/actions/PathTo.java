@@ -8,9 +8,9 @@ import env.GridEnvironment;
 import java.util.*;
 
 /*
- * Internal action that calculates the path (as a list of steps) between two points in the grid.
- ? Returns the path as a list of "up", "down", "left", "right" strings.
- ! If no path exists, returns false.
+ Internal action that calculates the path (as a list of steps) between two points in the grid.
+ Returns the path as a list of "up", "down", "left", "right" strings.
+ If no path exists, returns false.
  */
 public class PathTo extends DefaultInternalAction {
 
@@ -141,7 +141,7 @@ public class PathTo extends DefaultInternalAction {
         if (y2 == y1 - 1 && x2 == x1)
             return "up";
         System.out.println("dir: invalid move from (" + x1 + "," + y1 + ") to (" + x2 + "," + y2 + ")");
-        return "right"; // ! fallback; should not happen
+        return "right"; // Fallback - should not happen
     }
 
     private static int manhattan(int x1, int y1, int x2, int y2) {

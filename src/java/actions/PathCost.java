@@ -10,9 +10,9 @@ import env.GridEnvironment;
 import java.util.*;
 
 /*
- * Internal action that calculates the cost of the shortest path between two points in the grid.
- ? Returns the cost as an integer number of steps.
- ! If no path exists, returns a very high cost (9999).
+ Internal action that calculates the cost of the shortest path between two points in the grid.
+ Returns the cost as an integer number of steps.
+ If no path exists, returns a very high cost (9999).
  */
 public class PathCost extends DefaultInternalAction {
 
@@ -40,7 +40,7 @@ public class PathCost extends DefaultInternalAction {
 
             Integer cost = aStarCost(x1, y1, x2, y2);
             if (cost == null) {
-                return un.unifies(args[4], new NumberTermImpl(9999)); // ! Very high cost for no path => Don't choose this
+                return un.unifies(args[4], new NumberTermImpl(9999)); // Very high cost for no path => Don't choose this
             }
             return un.unifies(args[4], new NumberTermImpl(cost));
         } catch (Exception e) {
@@ -65,7 +65,7 @@ public class PathCost extends DefaultInternalAction {
         while (!open.isEmpty()) {
             Node cur = open.poll();
             if (cur.x == tx && cur.y == ty) {
-                return cur.g; // * path length in steps
+                return cur.g; // Path length in steps
             }
             if (closed[cur.x][cur.y])
                 continue;

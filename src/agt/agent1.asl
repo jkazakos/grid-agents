@@ -12,18 +12,14 @@ ignored_tasks([]).
 busy(false).
 step_count(0).
 escaping_corridor(false).
-
-// Graduated step-aside escalation
 yield_attempt_count(0).
 max_yield_attempts(3).
 safe_zone_center(2, 2).
 safe_zone_tiles([loc(1,2), loc(2,1), loc(2,2), loc(2,3), loc(3,2)]).
 tools_available(Tools) :- not (.member(T, Tools) & not holding(T) & not at(T, _, _)).
 
-// Corridor zone detection - right side of grid where conflicts occur
 corridor_zone(X, Y) :- X >= 4 & Y <= 2.
 
-// Check if a position has limited escape routes (narrow corridor)
 narrow_corridor_position(X, Y) :-
     not obstacle(X, Y) &
     .count(D, (
@@ -34,7 +30,6 @@ narrow_corridor_position(X, Y) :-
     ) & NX >= 0 & NX < 5 & NY >= 0 & NY < 5 & not obstacle(NX, NY), FreeNeighbors) &
     FreeNeighbors <= 2.
 
-// Hardcoded dead-end corners that should be avoided
 corridor_corner(4, 0). // This is a dead end, only exit is (4,1)
 
 
@@ -90,13 +85,10 @@ corridor_corner(4, 0). // This is a dead end, only exit is (4,1)
 +!decide_next_action : .count(task(ID,_,_,_) & not completed(ID), 0)
    <- -+busy(false);
       .print("I have no uncompleted tasks. Checking environment goals...");
-      // OPTIONAL: Move to a safe tile so I don't block the center (2,2)
-      // Only do this if I'm currently blocking a critical path (like 2,2)
       ?pos(Mx, My);
       if (Mx == 2 & My == 2) {
           !escape_to_safe_zone; 
       }
-      // Re-check environment percepts - they may have been updated
       if (open_door & painted_chair & painted_table) {
           .print("All goals are complete in environment. Finishing...");
           !finish_episode;
@@ -114,16 +106,12 @@ corridor_corner(4, 0). // This is a dead end, only exit is (4,1)
 
 // No options available
 +!select_best_option([])
-   <- // First check if all goals are actually done
-      if (open_door & painted_chair & painted_table) {
+   <- if (open_door & painted_chair & painted_table) {
           .print("All goals complete. No more tasks needed.");
           !finish_episode;
       } else {
           .print("No valid tasks available right now. Waiting...");
           -+busy(false);
-          
-          // PROACTIVE ESCAPE: If I'm at (4,1) and color is still at (4,0), escape to (3,2)
-          // This unblocks the corridor so the other agent can get the color
           ?pos(Px, Py);
           if (Px == 4 & Py == 1 & at(color, 4, 0)) {
               .print("I'm idle at (4,1) and color is still at (4,0). Escaping to (3,2) to unblock corridor...");
@@ -159,7 +147,6 @@ corridor_corner(4, 0). // This is a dead end, only exit is (4,1)
               .broadcast(tell, tile_cleared(4, 1));
           }
           
-          // Drop all tools so we don't block with phantom priority
           .findall(Item, holding(Item), HeldItems);
           for (.member(I, HeldItems)) {
               .print("Dropping ", I);
@@ -322,40 +309,20 @@ corridor_corner(4, 0). // This is a dead end, only exit is (4,1)
    <- -+busy(true);
       .print(">>> EXECUTING TASK: ", ID);
       .broadcast(tell, doing(ID));
-
-      // DEBUG: Dump Beliefs about Target/Tools
-      ?at(Target, Tx, Ty);
-      .print("DEBUG: Belief Target ", Target, " is at ", Tx, ",", Ty);
-      for ( .member(T, Tools) ) {
-          if (holding(T)) {
-              .print("DEBUG: Belief Tool ", T, " is held.");
-          } else {
-              if (at(T, ToolX, ToolY)) {
-                  .print("DEBUG: Belief Tool ", T, " is at ", ToolX, ",", ToolY);
-              } else {
-                  .print("DEBUG: Belief Tool ", T, " location is UNKNOWN.");
-              }
-          }
-      }
       // Manage inventory
-      .print("DEBUG: Preparing inventory for ", ID);
       !prepare_inventory(Tools, Target);
-      .print("DEBUG: Inventory prepared. Going to target ", Target);
       // Store current target for priority calculations
       -+current_target(Tx, Ty);
       // Go to target
       !go_to(Tx, Ty);
       -current_target(_,_);
-      
-      // Verification: Ensure I am still at target (might have yielded)
+      // Verification: Ensure I am still at target
       ?pos(CX, CY);
       if (CX \== Tx | CY \== Ty) {
           .print("CRITICAL: Moved away from target (at ", CX, ",", CY, ")! Aborting action.");
           .fail;
       }
-
       // Do the task
-      .print("DEBUG: At target. Performing action ", Type);
       !perform_action(Type, Target);
       // Update the task as completed
       +completed(ID);
@@ -389,21 +356,17 @@ corridor_corner(4, 0). // This is a dead end, only exit is (4,1)
       !drop_unneeded(CurrentItems, RequiredTools);
       .findall(T, (.member(T, RequiredTools) & not holding(T)), MissingTools);
       .length(MissingTools, MCount);
-      .print("DEBUG: Missing tools count: ", MCount, " Tools: ", MissingTools);
       !acquire_tools_strategy(MCount, MissingTools, Target).
 
 // Strategy A: 2 tools
 +!acquire_tools_strategy(2, MissingTools, Target)
    : pos(Ax, Ay) & at(Target, Tx, Ty)
-   <- .print("DEBUG: Sorting 2 tools for optimal path...");
-      !sort_tools_by_cost(MissingTools, Ax, Ay, Tx, Ty, OrderedTools);
-      .print("DEBUG: Ordered tools: ", OrderedTools);
+   <- !sort_tools_by_cost(MissingTools, Ax, Ay, Tx, Ty, OrderedTools);
       !acquire_missing(OrderedTools).
 
 // Strategy: Default
 +!acquire_tools_strategy(_, MissingTools, Target)
-   <- .print("DEBUG: Acquiring tools unsorted...");
-      !acquire_missing(MissingTools).
+   <- !acquire_missing(MissingTools).
 
 +!drop_unneeded([], _).
 +!drop_unneeded([Item|Rest], Needed) 
@@ -419,12 +382,10 @@ corridor_corner(4, 0). // This is a dead end, only exit is (4,1)
    : holding(Tool)
    <- !acquire_missing(Rest).
 +!acquire_missing([Tool|Rest])
-   <- .print("DEBUG: Acquiring ", Tool);
+   <- .print("Acquiring ", Tool);
       ?at(Tool, Tx, Ty);
-      .print("DEBUG: Tool at ", Tx, ",", Ty);
       !go_to(Tx, Ty);
       pickup(Tool);
-      .print("Picked up: ", Tool);
       !acquire_missing(Rest).
 
 // Safety check: Tool not found in environment
@@ -496,8 +457,6 @@ corridor_corner(4, 0). // This is a dead end, only exit is (4,1)
               if (other_agent_at(Nx, Ny)) {
                   !handle_collision(Nx, Ny, Tx, Ty, WaitCount);
               } else {
-                  // Static obstacle in the way of next step? 
-                  // This shouldn't happen with PathTo, but if it does, recompute
                   .wait(200);
                   !go_to_step(Tx, Ty, WaitCount);
               }
@@ -519,10 +478,9 @@ corridor_corner(4, 0). // This is a dead end, only exit is (4,1)
 
 +!handle_collision(Nx, Ny, Tx, Ty, WaitCount)
    <- ?pos(Cx, Cy);
-      
       // HARDCODED CORRIDOR DEADLOCK FIX:
       // If I'm at (4,2), trying to reach (4,0), and blocked at (4,1) by another agent,
-      // I need to back up to (4,3) to give them room to escape to (3,2).
+      // Back up to (4,3) to give the agent room to escape to (3,2).
       if (Cx == 4 & Cy == 2 & Tx == 4 & Ty == 0 & Nx == 4 & Ny == 1 & other_agent_at(4, 1)) {
           .print("CORRIDOR DEADLOCK: I'm at (4,2) blocking agent at (4,1) from escaping.");
           .print("Backing up to (4,3) to let them escape to (3,2)...");
@@ -536,14 +494,11 @@ corridor_corner(4, 0). // This is a dead end, only exit is (4,1)
           ?step_count(S);
           -+step_count(S + W);
           .print("Backed up to (4,3). Cost: ", W, " Total: ", S + W);
-          
           // Tell the blocked agent the path is clear
           .broadcast(tell, corridor_clear_you_can_escape);
-          
           // Wait for the other agent to escape through (4,2) to (3,2)
           .print("Waiting for blocked agent to escape via (4,2) -> (3,2)...");
           .wait(3000);
-          
           // Now continue to target
           .print("Resuming path to (4,0)...");
           !go_to_step(Tx, Ty, 0);
@@ -552,9 +507,8 @@ corridor_corner(4, 0). // This is a dead end, only exit is (4,1)
           !calculate_priority(Tx, Ty, MyP);
           .print("Collision at ", Nx, ",", Ny, "! My Priority: ", MyP);
           .broadcast(tell, yield_request(MyP));
-          // NEW: Send blocking message to stationary agent
+          // Send blocking message to stationary agent
           .broadcast(tell, blocking_my_path(Nx, Ny, Tx, Ty));
-          
           if (WaitCount > 5) {
               .print("Persistent conflict! Trying to path AROUND the other agent...");
               // Use a goal for alternate path calculation to handle failure
@@ -609,16 +563,14 @@ corridor_corner(4, 0). // This is a dead end, only exit is (4,1)
       ?yield_attempt_count(Attempts);
       NewAttempts = Attempts + 1;
       -+yield_attempt_count(NewAttempts);
-      
       ?max_yield_attempts(Max);
-      
       if (NewAttempts > Max) {
-          // ESCALATE: Too many failed attempts
+          // Too many failed attempts
           .print("Step-aside failed ", Max, " times. Escalating to safe zone escape...");
           -+yield_attempt_count(0);  // Reset counter
           !escape_to_safe_zone;
       } else {
-          // TRY: Single-step aside (existing logic)
+          // Single-step aside
           .print("Step-aside attempt ", NewAttempts, "/", Max);
           !try_single_step_aside;
       }.
@@ -630,16 +582,12 @@ corridor_corner(4, 0). // This is a dead end, only exit is (4,1)
       !calculate_next_pos(Cx, Cy, down, _, _);
       !calculate_next_pos(Cx, Cy, left, _, _);
       !calculate_next_pos(Cx, Cy, right, _, _);
-      
       // Corridor-aware escape: prioritize moving DOWN/LEFT to get out
-      // Also avoid stepping into dead-end corners like (4,0)
       if (corridor_zone(Cx, Cy)) {
           .findall(loc(Nx, Ny, D), (temp_next(Cx, Cy, D, Nx, Ny) & not actions.IsBlocked(Nx, Ny, true) & not corridor_corner(Nx, Ny)), GoodSafes);
-          
           .findall(loc(Nx, Ny, D), (.member(loc(Nx,Ny,D), GoodSafes) & D == down), DownMoves);
           .findall(loc(Nx, Ny, D), (.member(loc(Nx,Ny,D), GoodSafes) & D == left), LeftMoves);
           .findall(loc(Nx, Ny, D), (.member(loc(Nx,Ny,D), GoodSafes) & D \== down & D \== left), OtherGoodMoves);
-          
           .concat(DownMoves, LeftMoves, Temp1);
           .concat(Temp1, OtherGoodMoves, Safes);
       } else {
@@ -668,8 +616,7 @@ corridor_corner(4, 0). // This is a dead end, only exit is (4,1)
 +!escape_to_safe_zone
    <- ?pos(Cx, Cy);
       .print("Finding best escape position from ", Cx, ",", Cy);
-      
-      // Context-aware escape: find nearest tile with good escape routes (3+ free neighbors)
+      // Find nearest tile with good escape routes
       // First, check if we're in the corridor zone - if so, prioritize moving left/out
       if (corridor_zone(Cx, Cy)) {
           .print("In corridor zone. Prioritizing escape to open area...");
@@ -754,9 +701,7 @@ corridor_corner(4, 0). // This is a dead end, only exit is (4,1)
           .print("I am trapped at corner (4,0)! ", Ag, " at (4,1) must back up to (4,2).");
           .broadcast(tell, blocking_my_path(4, 1, 4, 2));
       } 
-      // SPECIAL CASE: Corridor exit logic
-      // If I am at (4,1) and Ag is at (4,2), I should NOT yield ONLY if I'm busy
-      // escaping. If I'm idle, I should yield to let them through.
+      // Corridor exit logic: If I am at (4,1) and Ag is at (4,2), I should NOT yield ONLY if I'm busy
       elif (Cx == 4 & Cy == 1 & other_agent_at(4, 2)) {
           if (IsBusy) {
               .print("I am at corridor bottleneck (4,1). ", Ag, " must back up from (4,2) to let me out.");
@@ -774,7 +719,7 @@ corridor_corner(4, 0). // This is a dead end, only exit is (4,1)
           !calculate_priority_minimal(MyP);
           .my_name(Me);
           ?pos(Cx, Cy);
-          // DETECT SWAP (Head-on collision)
+          // Head-on collision
           if (intend_move(Cx, Cy)[source(Ag)]) {
               .print("Detected HEAD-ON collision with ", Ag, ". Using strict tie-breaker.");
               if (Ag == agent1 & Me == agent2) {
@@ -785,10 +730,10 @@ corridor_corner(4, 0). // This is a dead end, only exit is (4,1)
                   .print("Not yielding to ", Ag, " (Swap detected, I am higher rank)");
               }
           } 
-          // REGULAR CONFLICT
+          // Regular conflict
           elif (ReqP > MyP | (math.abs(ReqP - MyP) <= 2 & Ag == agent1 & Me == agent2)) {
               .print("Yielding to ", Ag, " (", ReqP, " approx > ", MyP, ")");
-              // Add a small random wait so we don't sync up perfectly on the retry
+              // Add a small random delay to prevent sync
               .random(R);
               .wait(R * 200 + 100);
               !step_aside;
@@ -801,8 +746,7 @@ corridor_corner(4, 0). // This is a dead end, only exit is (4,1)
 // Handle blocking_my_path message - respond when I'm blocking another agent's path
 +blocking_my_path(BlockedX, BlockedY, OtherTargetX, OtherTargetY)[source(Ag)]
    <- ?pos(MyX, MyY);
-      // SPECIAL CASE: If the trapped agent is at (4,0) and I am at (4,1),
-      // I need to back up TWO tiles (to 4,3) to let them escape, then wait
+      // If the trapped agent is at (4,0) and I am at (4,1), I need to back up TWO tiles (to 4,3) to let them escape, then wait
       if (other_agent_at(4, 0) & MyX == 4 & MyY == 1) {
           .print("Agent at (4,0) is trapped! I'm at (4,1). Backing up to (4,3)...");
           // First backup step to (4,2)
@@ -825,8 +769,7 @@ corridor_corner(4, 0). // This is a dead end, only exit is (4,1)
           .print("Waiting for trapped agent to escape to safe zone...");
           .wait(2000);
       }
-      // SPECIAL CASE: If I'm at (4,1) and need to back up for agent going to (4,0)
-      // BUT: If I'm currently escaping the corridor, DON'T go back!
+      // If I'm at (4,1) and need to back up for agent going to (4,0)
       elif (other_agent_at(4, 2) & MyX == 4 & MyY == 1) {
           if (escaping_corridor(true)) {
               .print("I'm escaping corridor - NOT backing up to (4,0)!");
@@ -848,8 +791,7 @@ corridor_corner(4, 0). // This is a dead end, only exit is (4,1)
       elif (MyX == BlockedX & MyY == BlockedY) {
           .print("I am at ", MyX, ",", MyY, " blocking ", Ag, "'s path to ", OtherTargetX, ",", OtherTargetY);
           
-          // FIRST: Check for HEAD-ON collision (both agents blocking each other in transit)
-          // This happens when neither agent is at their actual task target
+          // Check for HEAD-ON collision
           ?busy(IsBusy);
           
           // Check if I'm at my actual task target or just passing through
@@ -857,11 +799,8 @@ corridor_corner(4, 0). // This is a dead end, only exit is (4,1)
           .length(TasksHere, TasksAtMyLocation);
           
           if (TasksAtMyLocation == 0 & IsBusy) {
-              // I'm busy but NOT at my task target - I'm in transit!
               .print("I'm in transit (not at my task target). Checking for head-on collision...");
-              
               // Check if the other agent is also blocking MY next step
-              // This is a head-on collision - both agents blocking each other
               if (other_agent_at(OtherTargetX, OtherTargetY)) {
                   .print("HEAD-ON COLLISION detected with ", Ag, "!");
                   // Compare priorities - lower priority agent should yield
@@ -877,7 +816,6 @@ corridor_corner(4, 0). // This is a dead end, only exit is (4,1)
                   }
               } else {
                   // I'm blocking them but they're not blocking me
-                  // Still yield since I'm just passing through
                   .print("I'm in transit and blocking ", Ag, ". Yielding...");
                   !step_aside;
               }
@@ -887,7 +825,7 @@ corridor_corner(4, 0). // This is a dead end, only exit is (4,1)
               .print("I'm idle and blocking ", Ag, ". Stepping aside immediately.");
               !step_aside;
           } else {
-              // I'm busy AND at my task target - legitimately working here
+              // I'm busy AND at my task target - actually working here
               .findall(ID, (completed(ID) & task(ID, _, Target, _) & at(Target, MyX, MyY)), CompletedHere);
               if (.length(CompletedHere, CL) & CL > 0) {
                   .print("I completed my task here. Stepping aside for ", Ag);
@@ -932,7 +870,6 @@ corridor_corner(4, 0). // This is a dead end, only exit is (4,1)
       if (Cx == 4 & Cy == 1) {
           .print("Received escape signal from ", Ag, ". Escaping (4,1) -> (4,2) -> (3,2)...");
           -+escaping_corridor(true);
-          
           // Move down to (4,2)
           move(down);
           .count(holding(_), ToolCount);
@@ -942,7 +879,6 @@ corridor_corner(4, 0). // This is a dead end, only exit is (4,1)
           ?step_count(S);
           -+step_count(S + W);
           .print("Escape step 1: (4,1) -> (4,2). Cost: ", W);
-          
           // Move left to (3,2)
           move(left);
           ?step_count(S2);
@@ -957,7 +893,6 @@ corridor_corner(4, 0). // This is a dead end, only exit is (4,1)
           .print("Received escape signal but not at (4,1). Current pos: ", Cx, ",", Cy);
       };
       .abolish(corridor_clear_you_can_escape).
-
 
 // Handle tile_cleared message - wake up if we were waiting for this tile
 +tile_cleared(X, Y)[source(Ag)]

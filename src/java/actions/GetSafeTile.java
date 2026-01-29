@@ -32,7 +32,6 @@ public class GetSafeTile extends DefaultInternalAction {
         ListTerm forbiddenTerm = (ListTerm) args[0];
         Set<Point> forbidden = new HashSet<>();
         
-        // Parse forbidden list
         for (Term t : forbiddenTerm) {
             Literal l = (Literal) t; // loc(x,y)
             int fx = (int) ((NumberTerm) l.getTerm(0)).solve();
@@ -57,13 +56,9 @@ public class GetSafeTile extends DefaultInternalAction {
         while (!queue.isEmpty()) {
             Point p = queue.poll();
 
-            // Check if this point is SAFE (Valid grid, no obstacle, not in forbidden)
-            // Note: We skip the check for the START point because we are currently standing on it
-            // and it might be in the forbidden list (that's why we are moving!)
             boolean isStart = (p.x == start.x && p.y == start.y);
             
             if (!isStart) {
-                // If it is valid grid, no wall, AND not forbidden -> Found it!
                 if (env.isFree(p.x, p.y) && !forbidden.contains(p)) {
                     boolean xOk = un.unifies(args[1], new NumberTermImpl(p.x));
                     boolean yOk = un.unifies(args[2], new NumberTermImpl(p.y));
@@ -74,16 +69,13 @@ public class GetSafeTile extends DefaultInternalAction {
             // Expand neighbors
             for (int[] d : dirs) {
                 Point neighbor = new Point(p.x + d[0], p.y + d[1]);
-                // Basic bounds check before adding to queue
                 if (neighbor.x >= 0 && neighbor.x < GridEnvironment.getWidth() &&
                     neighbor.y >= 0 && neighbor.y < GridEnvironment.getHeight() &&
                     !visited.contains(neighbor)) {
-                        
-                    // Don't even queue it if it's a static obstacle (Wall)
-                    if (!GridEnvironment.isBlocked(neighbor.x, neighbor.y)) {
-                        visited.add(neighbor);
-                        queue.add(neighbor);
-                    }
+                        if (!GridEnvironment.isBlocked(neighbor.x, neighbor.y)) {
+                            visited.add(neighbor);
+                            queue.add(neighbor);
+                        }
                 }
             }
         }
