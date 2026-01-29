@@ -38,11 +38,10 @@ public class GridEnvironment extends Environment {
     private Set<String> goalsDone;
 
     private static double totalScore = 0.0;
-    private static int episodeCount = 0;
     private boolean episodeFinished = false;
 
-    private int currentEpisode = 1;
-    private final int MAX_EPISODES = 100;
+    private static int currentEpisode = 1;
+    private static final int MAX_EPISODES = 100;
     private Random random = new Random();
 
     public static int getWidth() {
@@ -60,7 +59,6 @@ public class GridEnvironment extends Environment {
 
     public static void addEpisodeScore(double score) {
         totalScore += score;
-        episodeCount++;
     }
 
     // Converts object name to its corresponding bitmask
@@ -153,11 +151,11 @@ public class GridEnvironment extends Environment {
     }
 
     private static void printFinalStatistics() {
-        double averageScore = (double) totalScore / (double) episodeCount;
+        double averageScore = (double) totalScore / (double) currentEpisode;
         double utility = averageScore;
 
         System.out.println("#############################################");
-        System.out.println("      EXPERIMENT COMPLETE (" + episodeCount + " EPISODES)     ");
+        System.out.println("      EXPERIMENT COMPLETE (" + currentEpisode + " EPISODES)     ");
         System.out.println("      Average Expected Utility: " + utility);
         System.out.println("#############################################");
     }
@@ -394,14 +392,6 @@ public class GridEnvironment extends Environment {
         updatePercepts("agent1");
         updatePercepts("agent2");
         informAgsEnvironmentChanged();
-
-        /* Removed automatic trigger to allow agents to calculate score first
-        if (result && goalsDone.size() >= 3) {
-            try { Thread.sleep(1000); } catch (Exception e) {}
-            triggerNextEpisode(agName);
-        }
-        */
-
         return result;
     }
 
