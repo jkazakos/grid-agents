@@ -309,6 +309,7 @@ corridor_corner(4, 0). // This is a dead end, only exit is (4,1)
    <- -+busy(true);
       .print(">>> EXECUTING TASK: ", ID);
       .broadcast(tell, doing(ID));
+      ?at(Target, Tx, Ty);
       // Manage inventory
       !prepare_inventory(Tools, Target);
       // Store current target for priority calculations
