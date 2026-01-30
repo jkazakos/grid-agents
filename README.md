@@ -1,6 +1,6 @@
 # Grid Agent - Jason MAS Project
 
-Αυτό το repository περιέχει την υλοποίηση ενός Multi-Agent System (MAS) χρησιμοποιώντας το framework **Jason**. Ο πράκτορας (agent) έχει σχεδιαστεί για να λειτουργεί σε περιβάλλον πλέγματος (grid environment).
+Αυτό το repository περιέχει την υλοποίηση ενός Multi-Agent System (MAS) χρησιμοποιώντας το framework **Jason**. Οι πράκτορες (agents) έχουν σχεδιαστεί για να λειτουργούν σε περιβάλλον πλέγματος (grid environment).
 
 Για λεπτομέρειες σχετικά με τη λογική και τη σχεδίαση του συστήματος, παρακαλώ ανατρέξτε στο αναλυτικό Report και στην Παρουσίαση (PowerPoint) που συνοδεύουν αυτόν τον κώδικα.
 
@@ -41,5 +41,5 @@ gradle build
 Για να τρέξετε τον πράκτορα χρησιμοποιείστε την εντολή:
 
 ```bash
-jason grid_agent.mas2j
+gradle run
 ```

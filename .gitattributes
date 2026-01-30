@@ -1,12 +1,15 @@
 # Handle line endings automatically for text files
 * text eol=lf
 
-# Explicitly set paths for standard files
+#Standard files
 *.java text eol=lf
 *.gradle text eol=lf
 *.asl text eol=lf
 
-# Ensure binary files are never touched
+# Windows specific
+*.bat text eol=crlf
+
+# Binary files are never touched
 *.png binary
 *.jpg binary
 *.jar binary
