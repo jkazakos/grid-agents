@@ -1,45 +1,52 @@
 # Grid Agent - Jason MAS Project
 
-Αυτό το repository περιέχει την υλοποίηση ενός Multi-Agent System (MAS) χρησιμοποιώντας το framework **Jason**. Οι πράκτορες (agents) έχουν σχεδιαστεί για να λειτουργούν σε περιβάλλον πλέγματος (grid environment).
+## Overview
 
-Για λεπτομέρειες σχετικά με τη λογική και τη σχεδίαση του συστήματος, παρακαλώ ανατρέξτε στο αναλυτικό Report και στην Παρουσίαση (PowerPoint) που συνοδεύουν αυτόν τον κώδικα.
+This project implements a Multi-Agent System (MAS) using the **Jason** framework, a mature platform for developing and executing AgentSpeak-based systems. The agents are designed to autonomously operate, collaborate, and interact within a simulated grid environment. 
 
-## Προαπαιτούμενα
+### Key Features
 
-Για να τρέξετε το project, βεβαιωθείτε ότι έχετε εγκατεστημένα τα παρακάτω:
+- **BDI Architecture**: Agents are built using the Belief-Desire-Intention model, allowing for sophisticated reasoning and autonomous decision-making.
+- **Dynamic Grid Environment**: A simulated spatial environment where agents can perceive their surroundings, navigate securely, and interact with environmental elements.
+- **Multi-Agent Collaboration**: Agents can communicate and coordinate with one another to achieve common or individual goals.
 
-- **Java JDK 17** (Required).
-  - **Προσοχή:** Το project είναι ρυθμισμένο για Java 17 (`build.gradle`).
-  - Παλαιότερες εκδόσεις (π.χ. Java 8, 11) **δεν είναι συμβατές** και θα προκαλέσουν σφάλμα στο build.
-  - Νεότερες LTS εκδόσεις (π.χ. Java 21) ενδέχεται να λειτουργούν, αλλά συνίσταται η χρήση της 17.
-- **Jason Framework**
-- **Git Bash** (Προτείνεται για Windows).
-- **Gradle** (Προαιρετικό, μπορείτε να χρησιμοποιήσετε το `gradlew` που περιέχεται).
+For an in-depth explanation of the system's core logic, agent behaviors, architecture, and design decisions, please refer to the accompanying formal Report and Presentation.
 
-## Οδηγίες Εκτέλεσης
+## Prerequisites
 
-Ακολουθήστε τα παρακάτω βήματα για να κάνετε build και να τρέξετε τον πράκτορα.
+To build and run the project locally, please ensure the following dependencies are met:
 
-### Build του Project
+- **Java JDK 17** (Required)
+  - *Note:* The project is strictly configured for Java 17 via `build.gradle`.
+  - Older versions (e.g., Java 8, 11) are **incompatible** and will result in build failures.
+  - Newer LTS versions (e.g., Java 21) might work, but Java 17 is officially supported.
+- **Jason Framework** (Integrated logic programming for rational agents)
+- **Git Bash** (Recommended for terminal operations on Windows)
+- **Gradle** (Optional, as the repository includes a Gradle wrapper)
 
-Ανοίξτε το τερματικό σας (κατά προτίμηση **Git Bash**) μέσα στον φάκελο `grid_agent`.
+## Getting Started
 
-Για να χτίσετε το project και να κατέβουν οι απαραίτητες βιβλιοθήκες, τρέξτε:
+Follow these instructions to build and execute the system.
+
+### Building the Project
+
+To compile the project and fetch all required dependencies, execute:
 
 ```bash
 gradle build
 ```
 
-Ή αν δεν έχετε Gradle εγκατεστειμένο μπορείτε να τρέξετε μέσω του wrapper:
+Alternatively, if you do not have Gradle globally installed on your system, use the provided wrapper:
 
 ```bash
 ./gradlew build
 ```
 
-### Τρέξιμο του Πράκτορα
+### Running the Agents
 
-Για να τρέξετε τον πράκτορα χρησιμοποιείστε την εντολή:
+Once the build is complete, you can start the Multi-Agent System using the following command:
 
 ```bash
 gradle run
 ```
+*(Or `./gradlew run` if using the wrapper)*
