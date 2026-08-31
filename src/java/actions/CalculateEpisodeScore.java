@@ -37,7 +37,7 @@ public class CalculateEpisodeScore extends DefaultInternalAction {
         // Only calculate final score when BOTH agents have reported
         if (agent1Cost != -1 && agent2Cost != -1) {
             int totalCost = agent1Cost + agent2Cost;
-            
+
             // Actual cost number
             double actualCost = (double) totalCost / 100.0;
 
@@ -50,7 +50,8 @@ public class CalculateEpisodeScore extends DefaultInternalAction {
             // Adding the score to the total score
             GridEnvironment.addEpisodeScore(finalScore);
 
-            System.out.println("EPISODE FINISHED: Total Cost=" + totalCost + " Final Score=" + finalScore);
+            System.out.printf("  [SCORE] Total Step Cost = %d  |  Episode Score = %.4f%n",
+                    totalCost, finalScore);
 
             // Reset for next episode
             agent1Cost = -1;

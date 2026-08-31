@@ -4,14 +4,15 @@ plugins {
 }
 
 java {
-    sourceCompatibility = JavaVersion.VERSION_17
-    targetCompatibility = JavaVersion.VERSION_17
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(21)
+    }
 }
 
 repositories {
     mavenCentral()
     maven { url = "https://raw.githubusercontent.com/jacamo-lang/mvn-repo/master" }
-    maven { url = "https://jade.tilab.com/maven/" } 
+    maven { url = "https://jade.tilab.com/maven/" }
 }
 
 dependencies {
@@ -24,6 +25,9 @@ sourceSets {
         java {
             srcDirs = ['src/java']
         }
+        resources {
+            srcDirs = ['src/resources', 'src/agt']
+        }
     }
 }
 
@@ -31,9 +35,28 @@ application {
     mainClass = 'Main'
 }
 
-compileJava.options.encoding = 'UTF-8'
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+    options.compilerArgs += ['-Xlint:unchecked', '-Xlint:deprecation']
+}
 
 tasks.named('run') {
+    workingDir = rootDir
     args 'grid_agent.mas2j'
     standardInput = System.in
+    jvmArgs = [
+        '--add-opens=java.base/java.lang=ALL-UNNAMED',
+        '--add-opens=java.base/java.util=ALL-UNNAMED',
+        '-Dfile.encoding=UTF-8'
+    ]
+}
+
+tasks.named('jar') {
+    manifest {
+        attributes 'Main-Class': 'Main'
+    }
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    from {
+        configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) }
+    }
 }
