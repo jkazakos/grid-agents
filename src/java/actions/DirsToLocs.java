@@ -21,10 +21,18 @@ public class DirsToLocs extends DefaultInternalAction {
         for (Term t : path) {
             String dir = t.toString().replaceAll("\"", "");
             switch (dir) {
-                case "up": y--; break;
-                case "down": y++; break;
-                case "left": x--; break;
-                case "right": x++; break;
+                case "up":
+                    y--;
+                    break;
+                case "down":
+                    y++;
+                    break;
+                case "left":
+                    x--;
+                    break;
+                case "right":
+                    x++;
+                    break;
             }
             // Use createLiteral to form loc(x,y)
             Literal loc = ASSyntax.createLiteral("loc", new NumberTermImpl(x), new NumberTermImpl(y));

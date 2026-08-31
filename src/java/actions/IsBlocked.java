@@ -19,7 +19,8 @@ public class IsBlocked extends DefaultInternalAction {
         String agName = ts.getAgArch().getAgName();
 
         GridEnvironment env = GridEnvironment.getInstance();
-        if (env == null) return false;
+        if (env == null)
+            return false;
 
         boolean blocked = false;
 

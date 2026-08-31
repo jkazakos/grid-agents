@@ -20,7 +20,11 @@ public class PathTo extends DefaultInternalAction {
         Node parent;
 
         Node(int x, int y, int g, int f, Node p) {
-            this.x = x; this.y = y; this.g = g; this.f = f; this.parent = p;
+            this.x = x;
+            this.y = y;
+            this.g = g;
+            this.f = f;
+            this.parent = p;
         }
     }
 
@@ -43,15 +47,17 @@ public class PathTo extends DefaultInternalAction {
                 return false;
             }
 
-            System.out.println("PathTo: calculating path from (" + x1 + "," + y1 + ") to (" + x2 + "," + y2 + ") (avoidAgent: " + avoidAgent + ")");
-            
+            System.out.println("PathTo: calculating path from (" + x1 + "," + y1 + ") to (" + x2 + "," + y2
+                    + ") (avoidAgent: " + avoidAgent + ")");
+
             List<String> steps = aStarPath(env, x1, y1, x2, y2, avoidAgent, ts.getAgArch().getAgName());
             if (steps == null) {
                 System.out.println("PathTo: no path found.");
                 return false;
             }
 
-            // System.out.println("PathTo: path found with " + steps.size() + " steps: " + steps);
+            // System.out.println("PathTo: path found with " + steps.size() + " steps: " +
+            // steps);
             ListTerm list = new ListTermImpl();
             for (String s : steps) {
                 list.add(new Atom(s));
@@ -66,11 +72,12 @@ public class PathTo extends DefaultInternalAction {
         }
     }
 
-    private List<String> aStarPath(GridEnvironment env, int sx, int sy, int tx, int ty, boolean avoidAgent, String myName) {
+    private List<String> aStarPath(GridEnvironment env, int sx, int sy, int tx, int ty, boolean avoidAgent,
+            String myName) {
         if (sx == tx && sy == ty) {
             return new ArrayList<>();
         }
-        
+
         if (GridEnvironment.isBlocked(tx, ty)) {
             System.out.println("aStarPath: target (" + tx + "," + ty + ") is blocked.");
             return null;
@@ -95,20 +102,25 @@ public class PathTo extends DefaultInternalAction {
                 end = cur;
                 break;
             }
-            if (closed[cur.x][cur.y]) continue;
+            if (closed[cur.x][cur.y])
+                continue;
             closed[cur.x][cur.y] = true;
 
             for (int i = 0; i < DIRS.length; i++) {
                 int nx = cur.x + DIRS[i][0];
                 int ny = cur.y + DIRS[i][1];
 
-                if (nx < 0 || ny < 0 || nx >= W || ny >= H) continue;
+                if (nx < 0 || ny < 0 || nx >= W || ny >= H)
+                    continue;
 
-                if (GridEnvironment.isBlocked(nx, ny)) continue;
+                if (GridEnvironment.isBlocked(nx, ny))
+                    continue;
 
-                if (avoidAgent && otherPos != null && otherPos.x == nx && otherPos.y == ny) continue;
+                if (avoidAgent && otherPos != null && otherPos.x == nx && otherPos.y == ny)
+                    continue;
 
-                if (closed[nx][ny]) continue;
+                if (closed[nx][ny])
+                    continue;
 
                 int ng = cur.g + 1;
                 int nf = ng + manhattan(nx, ny, tx, ty);
@@ -117,7 +129,8 @@ public class PathTo extends DefaultInternalAction {
             }
         }
 
-        if (end == null) return null;
+        if (end == null)
+            return null;
 
         // Reconstruct steps (reverse)
         List<String> rev = new ArrayList<>();
