@@ -101,9 +101,11 @@ public class Main {
             System.setOut(teeOut);
             System.setErr(terminalErr);
 
-            terminalOut.println("=============================================");
-            terminalOut.println("MAS Started: Output streaming to Terminal & GUI Console");
-            terminalOut.println("=============================================");
+            terminalOut.println("=================================================================");
+            terminalOut.println("           JASON MULTI-AGENT SYSTEM (MAS) INITIALIZED            ");
+            terminalOut.println("   Grid World: 5x5 Matrix  |  Autonomous BDI Rational Agents     ");
+            terminalOut.println("   Console Output Streaming to Terminal & Swing GUI              ");
+            terminalOut.println("=================================================================");
 
             // 6. Start agents
             runner.start();
