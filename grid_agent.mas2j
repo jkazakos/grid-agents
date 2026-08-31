@@ -1,6 +1,6 @@
 MAS gridAgent {
 
-  infrastructure: Centralised
+  infrastructure: Centralised(console)
   environment: env.GridEnvironment
   agents:
       agent1 agent1.asl;
